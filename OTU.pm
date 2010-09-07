@@ -13,6 +13,7 @@ use File::Path qw( make_path );
 use File::Copy;
 use IPC::System::Simple qw(capture $EXITVAL);
 use Data::Dumper;
+use POSIX;
 
 =head2 new
 
@@ -410,14 +411,11 @@ sub run_cmalign{
 	my $cmfile    = $self->{"db"}->{"profile"}   . "SSU_" . $set . ".mod";
 	my $refaln    = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_ref.stk";
 	my @args = ("--rf", "--dna","--hbanded","--sub", "-o $outaln", "--withali", "$refaln", "$cmfile", "$sequences");
-	my $results = capture( "cmalign @args" );
+	my $results = capture( "cmalign @args > $cmscores" );
 	if( $EXITVAL != 0 ){
 	    warn("Error running cmalign for $sequences against $cmfile using $refaln!\n");
 	    exit(0);
 	}
-	open (SCORES, ">$cmscores" ) || die "Can't open $cmscores for read:$!\n";
-	print SCORES $results;
-	close SCORES;
 	$set_ct++;
     }
     return $set_ct;
@@ -716,6 +714,116 @@ sub run_mothur{
     }  
   }
 }
+
+
+=head2 split_query
+
+ Title   : split_query
+ Usage   : $project->split_query($num);
+ Function: Split an input sample file of reads into several smaller files
+           with the names $SampleFile_$FileNumber
+ Example : my @subsample_files =$project->split_query(5);
+           # run blast on each input file
+           $project->stitch(@subsample_files); # put together all the blast results
+ Returns : Array of the names of the files produced
+ Args    : Contents of the original file are split into $num files, 
+           with an equal number of reads in each (deliminted with a >)
+
+=cut
+
+sub split_query{
+
+    my ( $self, $nsplit) = @_;
+    my $filename = $self->{"sample"}->{"path"};
+    my $nlines   = capture( "grep -c \">\" \"$filename\"");
+    my $nsubfile = ceil( $nlines / $nsplit );
+    open( FULLFILE, $filename ) || die "Can't open sample file ".$filename.": $!\n";
+    my $lcount =$nlines;
+    my $fcount =1;
+    my @subfilenames;
+
+    print "splitting ".$filename." into ".$nsplit." files with ".$nsubfile." reads each\n";
+
+    while( <FULLFILE> ){
+	# Read in the next line of the file
+	if( $_ =~ m/>/ ){
+	    # This is a new read, so I finished the old one, so increment the # lines
+	    $lcount++;
+	    
+	    # Check if this read needs to go in a new file
+	    if( ($lcount>=$nsubfile) && ($fcount<=$nsplit) ){
+		# The last file will have a few extra from the rounding down
+		if( $fcount >= 1 ){ close( SUBFILE ); }
+		my ( $name, $path, $suffix ) = fileparse( $filename, qr/\.[^.]*/ );
+		my $subfilename = $path.$name."_".$fcount.$suffix;
+		open( SUBFILE, ">".$subfilename) || die "Can't open new sum-sample file: $!\n";
+		push(@subfilenames, $subfilename);
+		# Reset the line count, increment the file number
+		$lcount = 0;
+		$fcount++;
+	    }
+	}
+	# Print this line to the file
+	print SUBFILE $_;
+    }
+    close( FULLFILE );
+    close( SUBFILE );
+    return @subfilenames;
+}
+
+=head2 stitch_blast
+
+ Title   : stitch_blast
+ Usage   : $project->stitch_blast(5);
+ Function: Concatenate several blast files together
+           Files must have the filename $dir/$base_$num.$suffix
+ Example : my @subsample_files = $project->split_query(5);
+           # run blast on each input file
+           $project->stitch(@subsample_files); # put together all the blast results
+ Returns : 
+ Args    : 
+
+=cut
+    
+sub stitch_blast{
+ 
+    my ( $self, @ffiles ) = @_;
+    my $blastpath = $self->{"db"}->{"blastout"};
+    my $SSUpath   = $self->{"db"}->{"SSU_reads"};
+    my $sampdir   = $blastpath;
+       $sampdir  =~ s/blastout/samples/g;
+
+    foreach my $set( @{ $self->{"domains"} } ){
+	my $blastsuffix  = "_SSU_" . $set . ".blast";
+	my $SSUsuffix    = "_SSU_" . $set . ".fa";
+
+	# I will cat all the blastout and SSU files together into these files
+	my $blastoutfile = $blastpath . $self->{"sample"}->{"name"} . $blastsuffix;
+	my $SSUoutfile   = $SSUpath   . $self->{"sample"}->{"name"} . $SSUsuffix;
+	# Delete them to be sure we start with a clean slate, since I will append these files
+	unlink($blastoutfile);
+	unlink($SSUoutfile);
+
+	foreach my $ffile ( @ffiles ){
+	    my ( $name, $path, $suffix ) = fileparse( $ffile, qr/\.[^.]*/ );
+	    my $subsampdir = $sampdir . $name;                       # samples/SubSampleName
+	    my $bfile = $blastpath          . $name . $blastsuffix;  # The subsample's blastout file
+	    my $sfile = $subsampdir."/SSU/" . $name . $SSUsuffix;    # The subsample's SSU file
+
+	    # Put all the blast results into one file
+	    # Put all the SSU files together
+	    capture( "cat $bfile >> $blastoutfile" );
+	    capture( "cat $sfile >> $SSUoutfile"   );
+
+	    # Cleanup
+	    unlink($ffile);                  # Delete the subsample fasta file in the original directory
+	    unlink($bfile);                  # Delete the blastout file
+	    capture( "rm -rf $subsampdir");  # Delete the new sample directory that was made (this includes $sfile)
+
+	}
+    }
+}
+
 
 ######################################
 # SIMULATION SPECIFIC FUNCTIONS HERE #
