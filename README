@@ -1,0 +1,82 @@
+Welcome to PhylOTU.
+
+This software is still in beta and is subject to change. More specific documentation is being worked up. 
+In the meantime, please see the source code for more information (otu_handler.pl and OTU.pm) and 
+contact the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu) with specific inquiries.
+
+Keep an eye out for the PhylOTU manuscript, which is currently in review.
+
+August 2010 TJS
+
+==INTRODUCTION==
+
+PhylOTU is a software workflow that identifies OTUs directly from metagenomic reads. Because of the 
+particular methodology employed in PhylOTU, reads that share no sequence overlap (i.e., cannot be 
+aligned to one another) can still be clustered into the same OTU. In addition, reads are not recruited into
+top BLAST hits, but are effectively clustered de novo.
+
+Briefly, PhylOTU uses a CMmodel of the 16S locus (via INFERNAL) to align metagenomic reads. The CMmodel
+is contrusted using a reference alignment of high-quality, full-length 16S sequences. A phylogenetic tree
+is constructed from the multiple sequence alignment of reads and reference sequences via FastTree. The
+phylogenetic distance spanning every pair of reads is then calculated from the resulting tree and used 
+to create a distance matrix describing pairwise read relationships. This distance matrix is then fed into 
+MOTHUR, which implements average-neighbor clustering to identify OTUs. The final output (a list of OTU clusters)
+is a file in the matrix subdirectory of the metagenomic sample set with the following typed name:
+
+<path_to_database>/samples/<SAMPLE_NAME>/matrix/<SAMPLE_NAME>.an.list
+
+==REQUIREMENTS==
+
+There are lots of dependencies. Please read carefully to ensure your system is properly configured.
+
+A. Software
+PhylOTU is primarily written in Perl 5 and R. Run time dependencies include the following Perl packages:
+-Bioperl-live libraries
+-IPC::System::Simple
+-Bio::Phylo::IO
+-File::Basename
+-File::Path
+-File::Copy
+
+In addition, you must have the following R library installed:
+-APE
+
+PhylOTU stitches together various software packages written by other authors. While the software can easily
+be modified to accomodate various software suites, it is currently designed to implement the following 
+tools, which you will also need to install on your system:
+
+-INFERNAL (http://infernal.janelia.org/)
+-FastTree (http://www.microbesonline.org/fasttree/)
+-BLAST [legacy version] (ftp://ftp.ncbi.nlm.nih.gov/blast/executables/release/LATEST/)
+-MOTHUR (http://www.mothur.org/wiki/Main_Page)
+
+Please see the authors' websites for instructions regarding the installation of any of the above software.
+
+B. Reference Data
+
+PhylOTU leverages reference 16S sequence data (high-quality, full-length) to construct an evolutionary model via
+the cmbuild function in INFERNAL. 
+
+Because of the particular licensing agreement, we cannot currently distribute the reference data we use in our study
+with this software (though we are working with the publishers of the reference data to change this). We recommend 
+contacting the Ribosomal Database Project to obtain the reference library described in the RDP v 10 manuscript:
+
+Cole et. al. The Ribosomal Database Project: improved alignments and new tools for rRNA analysis. Nucleic Acids Res. 2009 Jan;37(Database issue):D141-5. Epub 2008 Nov 12.
+
+Alternatively, create your own 16S reference alignment and use the following example command to create a cm model:
+
+cmbuild --rf --ere 1.4 <name of model> <reference alignment file>
+
+==IMPLEMENTATION==
+
+PhylOTU is run directly at the command line and is implemented via a single command:
+
+perl otu_handler.pl -i <metagenomic sequence file>
+
+That said, there are many settings that need to be controlled for successful implementation of PhylOTU. Please see the 
+source code of otu_hander.pl for more details at this time. The output of PhylOTU is a database of files in addition to
+run-time logs. You may elect to pipe these logs to a file to reduce screen clutter with the follwing command:
+
+perl otu_handler.pl -i <metagenomic sequence file> > standard.out 2> error.log
+
+Please send all bug reports and inquiries to the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu).
