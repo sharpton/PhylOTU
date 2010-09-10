@@ -35,19 +35,19 @@ $aln_format         = "fasta";
 GetOptions(
 	   "i=s"   => \$input,              #Path to alignment object(s)
 	   "o=s"   => \$output,             #Output file path
-	   "s=s"   => \$seq_scores_tab,     #Formatted for INFERNAL verbose output
-	   "l=s"   => \$lookup_list,        #Path to list of sequence ids to prune from alignment
-	   "lc=i"  => \$seq_len_cut,        #Minimum sequence length cutoff
-	   "sc=i"  => \$aln_seq_score_cut,  #Minimum alignment score for each sequence cutoff
-	   "sr=i"  => \$aln_seq_score_rat,  #Minimum bit score per base in sequence cutoff
-	   "pc=i"  => \$aln_seq_p_cut,      #Minimum p-val/e-val for each sequence cutoff
-	   "grc=i" => \$gap_ratio_cut,      #Minimum number of gaps/window for each sequence cutoff	   "mrc=i" => \$mm_ratio_cut,       #Minimum number of mismatches/window per sequence cutoff
-	   "cov=i" => \$pcnt_cov_cut,       #Percentage of sequence positions that must be covered by model/concensus (minimum)
-	   "ngc=i" => \$ngaps_internal_cut, #Maximum number of sequence bounded gaps tolerated per sequence (TOTAL GAPS)
-	   "gcc=i" => \$gappy_col_cut,      #Maximum number of gaps in a column divided by sequences in an alignment
-	   "mmw=i" => \$mm_window,          #Size of mismatch window (Default = 50)
-	   "gpw=i" => \$gap_window,         #Size of gap window (Default = mm_window)
-	   "f=s"   => \$aln_format,         #Alignment format (Default = FASTA)
+	   "s:s"   => \$seq_scores_tab,     #Formatted for INFERNAL verbose output
+	   "l:s"   => \$lookup_list,        #Path to list of sequence ids to prune from alignment
+	   "lc:i"  => \$seq_len_cut,        #Minimum sequence length cutoff
+	   "sc:i"  => \$aln_seq_score_cut,  #Minimum alignment score for each sequence cutoff
+	   "sr:i"  => \$aln_seq_score_rat,  #Minimum bit score per base in sequence cutoff
+	   "pc:i"  => \$aln_seq_p_cut,      #Minimum p-val/e-val for each sequence cutoff
+	   "grc:i" => \$gap_ratio_cut,      #Minimum number of gaps/window for each sequence cutoff	   "mrc=i" => \$mm_ratio_cut,       #Minimum number of mismatches/window per sequence cutoff
+	   "cov:i" => \$pcnt_cov_cut,       #Percentage of sequence positions that must be covered by model/concensus (minimum)
+	   "ngc:i" => \$ngaps_internal_cut, #Maximum number of sequence bounded gaps tolerated per sequence (TOTAL GAPS)
+	   "gcc:i" => \$gappy_col_cut,      #Maximum number of gaps in a column divided by sequences in an alignment
+	   "mmw:i" => \$mm_window,          #Size of mismatch window (Default = 50)
+	   "gpw:i" => \$gap_window,         #Size of gap window (Default = mm_window)
+	   "f:s"   => \$aln_format,         #Alignment format (Default = FASTA)
 	   "flat"  => \$flat,             #use flat to keep coords out of headers
 );
 
@@ -83,13 +83,17 @@ while( my $aln = $in_aln->next_aln() ){
   my $nseqs  = $aln->num_sequences();
   my $alnlen = $aln->length();
   #build a sequence, gap, insert map of the alignment
-  my %pre_alignment_map = %{ build_alignment_map( $aln ) };
+  #my %pre_alignment_map = %{ build_alignment_map( $aln ) };
   foreach my $seq ($aln->each_seq) {
     my $to_prune   = 0;
     my @reasons    = ();
     my $id         = $seq->display_id();
     my $sequence   = $seq->seq();
-    my $seqlen     = $seq->length();
+    #sequence length shouldn't count gaps/inserts, so copy $sequence and count seq length
+    my $seq_seq    = $sequence;
+    $seq_seq       =~ s/\-//g;
+    $seq_seq       =~ s/\.//g;
+    my $seqlen     = length( $seq_seq );
     my $residues   = $sequence;
     $residues      =~ s/(\-|\.)|//g;
     my $n_residues = length($residues);
@@ -143,7 +147,7 @@ while( my $aln = $in_aln->next_aln() ){
       $aln->remove_seq($seq);
     }
   }
-  %pre_alignment_map = ();
+  #%pre_alignment_map = ();
   
   #POST PRUNING ALIGNMENT CLEANUP/MASKING
   #Now iterate through the sequences that passed and remove bad columns from the alignment.
