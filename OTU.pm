@@ -138,7 +138,7 @@ sub build_db{
 	mkdir( $masterdir );
     }
     my $sample    = $self->{"sample"}->{"name"};
-    my $sampledir = $masterdir . "/samples/" . $sample;
+    my $sampledir = $masterdir . "samples/" . $sample;
     $self->{"db"} = {
 	#BLASTDBS
 	blastdb   => $masterdir . "/blastdbs/",
@@ -220,7 +220,7 @@ sub load_blastreports{
 
  Title   : run_SSU_blast
  Usage   : $project->run_SSU_blast();
- Function: A blastn wrapper. Searches sample reads against each set's SSU blastdb.
+ Function: A blastn wrapper. Searches sample reads against each sets SSU blastdb.
  Example : $project->run_SSU_blast();
  Returns : None
  Args    : None
@@ -239,6 +239,7 @@ sub run_SSU_blast{
 	my $blastreport = $self->{"db"}->{"blastout"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . ".blast";
 	$self->{"breports"}->{$set} = $blastreport;
 	my @args = ("-p blastn", "-i $input", "-d $database", "-o $blastreport", "-m 8", "-e $blaste");
+#	my @args = ("-p blastn", "-i $input", "-d $database", "-o $blastreport", "-e $blaste");
 	my $results = capture( "blastall @args" );
 	if( $EXITVAL != 0 ){
 	    warn("Error running $blasttype in run_SSU_blast!\n");
@@ -247,6 +248,7 @@ sub run_SSU_blast{
     }
     return $set_ct;
 }
+
 
 =head2 grab_SSU_reads
 
@@ -391,7 +393,7 @@ sub grab_SSU_reads{
  Title   : run_cmalign
  Usage   : $project->run_cmalign();
  Function: A cmalign (INFERNAL) wrapper. Aligns sample SSU reads for each set to the
-           set's reference profile, merging the reference alignment to the output.
+           sets reference profile, merging the reference alignment to the output.
            The resulting alignment, alignment score table are stored
  Example : $project->run_cmalign();
  Returns : None
@@ -411,11 +413,14 @@ sub run_cmalign{
 	my $cmfile    = $self->{"db"}->{"profile"}   . "SSU_" . $set . ".mod";
 	my $refaln    = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_ref.stk";
 	my @args = ("--rf", "--dna","--hbanded","--sub", "-o $outaln", "--withali", "$refaln", "$cmfile", "$sequences");
+#	open (SCORES, ">$cmscores" ) || die "Can't open $cmscores for read:$!\n";
 	my $results = capture( "cmalign @args > $cmscores" );
 	if( $EXITVAL != 0 ){
 	    warn("Error running cmalign for $sequences against $cmfile using $refaln!\n");
 	    exit(0);
 	}
+#	print SCORES $results;
+#	close SCORES;
 	$set_ct++;
     }
     return $set_ct;
@@ -427,7 +432,7 @@ sub run_cmalign{
  Usage   : $project->format_alignments();
  Function: Converts cmalign stockholm alignments into fasta format, which is necessary
            for downstream steps. Also formats headers to remove weird cmalign
-           characters ("\" and "-" are converted to "_")
+           characters ("\" and "-" are converted to "_")"
  Example : $project->format_alignments();
  Returns : None
  Args    : None
@@ -481,10 +486,11 @@ sub run_align_qc{
     foreach my $set ( @domains) {
         my $inaln    = $self->{"db"}->{"all_align"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all.fa";
         my $outaln   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc.fa";
+        my $gapaln   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc.gap";
         my $cmscores = $self->{"db"}->{"cm_scores"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_cmscores.tab";
         #run with flat on to prevent printing of seq coords in headers                                                                                                    
-        my @args     = ("-i $inaln", "-o $outaln", "-s $cmscores", "-flat", "-lc $lencut");
-        my $results  = capture( "perl " . $self->{"workdir"} . "align2profile_qc.pl @args" );
+        my @args     = ("-i $inaln", "-o $outaln", "-s $cmscores", "-flat", "-lc $lencut -g $gapaln");
+        my $results  = capture( "perl " . $self->{"workdir"} . "align2profile_qc.pl @args");
         if( $EXITVAL != 0 ){
             warn("Error running align2profile_qc.pl for $inaln!\n");
             exit(0);
@@ -719,12 +725,15 @@ sub run_mothur{
 =head2 split_query
 
  Title   : split_query
- Usage   : $project->split_query($num);
+ Usage   : $project->split_query($type $num);
  Function: Split an input sample file of reads into several smaller files
            with the names $SampleFile_$FileNumber
- Example : my @subsample_files =$project->split_query(5);
+ Example : my @subsample_files =$project->split_query("blast", 5);
            # run blast on each input file
-           $project->stitch(@subsample_files); # put together all the blast results
+           $project->stitch_blast(@subsample_files); # put together all the blast results
+           my @subsample_files =$project->split_query("alignQC", 5);
+           # run alignQC on each input file
+           $project->stitch_alignQC(@subsample_files); # put together all the alignQC results  
  Returns : Array of the names of the files produced
  Args    : Contents of the original file are split into $num files, 
            with an equal number of reads in each (deliminted with a >)
@@ -733,53 +742,86 @@ sub run_mothur{
 
 sub split_query{
 
-    my ( $self, $nsplit) = @_;
-    my $filename = $self->{"sample"}->{"path"};
-    my $nlines   = capture( "grep -c \">\" \"$filename\"");
-    my $nsubfile = ceil( $nlines / $nsplit );
-    open( FULLFILE, $filename ) || die "Can't open sample file ".$filename.": $!\n";
-    my $lcount =$nlines;
-    my $fcount =1;
-    my @subfilenames;
+    my ( $self, $type, $nsplit) = @_;
+    my @domains   = @{ $self->{"domains"} };
+    my @subfilenames;   # file names returned, used to submit new jobs
+    my ( $name, $path, $suffix ) = fileparse( $self->{"sample"}->{"path"}, qr/\.[^.]*/ );
 
-    print "splitting ".$filename." into ".$nsplit." files with ".$nsubfile." reads each\n";
+    foreach my $set ( @domains) {
+      $path =~ s/raw\///g;
+      my $oldraw    = $path    . "raw/"          .$name    . ".fa";
+      my $oldscore  = $path    . "aligns/scores/" . $name    . "_SSU_" . $set . "_cmscores.tab";
+      my $infile;
+      if( $type =~ "blast"){
+	$infile = $self->{"sample"}->{"path"};
+      } elsif($type =~ "alignQC") {
+	$infile = $self->{"db"}->{"all_align"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all.fa";
+      } else {
+	print ("Don't recognise type $type, don't know what file to split\n");
+	exit(0);
+      }
 
-    while( <FULLFILE> ){
+      my $nlines   = capture( "grep -c \">\" \"$infile\"");
+      my $nsubfile = ceil( $nlines / $nsplit );
+      open( FULLFILE, $infile ) || die "Can't open sample file ".$infile.": $!\n";
+      my $lcount =$nlines;
+      my $fcount =1;
+      print "splitting ".$infile." into ".$nsplit." files with ".$nsubfile." reads each\n";
+
+      while( <FULLFILE> ){
 	# Read in the next line of the file
 	if( $_ =~ m/>/ ){
-	    # This is a new read, so I finished the old one, so increment the # lines
-	    $lcount++;
-	    
-	    # Check if this read needs to go in a new file
-	    if( ($lcount>=$nsubfile) && ($fcount<=$nsplit) ){
-		# The last file will have a few extra from the rounding down
-		if( $fcount >= 1 ){ close( SUBFILE ); }
-		my ( $name, $path, $suffix ) = fileparse( $filename, qr/\.[^.]*/ );
-		my $subfilename = $path.$name."_".$fcount.$suffix;
-		open( SUBFILE, ">".$subfilename) || die "Can't open new sum-sample file: $!\n";
-		push(@subfilenames, $subfilename);
-		# Reset the line count, increment the file number
-		$lcount = 0;
-		$fcount++;
+	  # This is a new read, so I finished the old one, so increment the # lines
+	  $lcount++;
+	  
+	  # Check if this read needs to go in a new file
+	  if( ($lcount>=$nsubfile) && ($fcount<=$nsplit) ){
+	    # The last file will have a few extra from the rounding down
+	    if( $fcount >= 1 ){ close( SUBFILE ); }
+	    # Set-up the new directories and files
+	    my $newname = $name . "_" . $fcount;
+	    my $newpath = $path;
+	    $newpath    =~ s/$name/$newname/g;
+	    my $rawfile = $newpath . "raw/" . $newname . ".fa";
+	    make_path( $newpath."raw/", $newpath."aligns/raw/", $newpath."aligns/scores/");
+	    my $outfile;
+	    if( $type =~ "blast"){
+	      $outfile = $rawfile;
+	    } elsif($type =~ "alignQC") {
+	      my $alnfile   = $newpath . "aligns/raw/"    . $newname . "_SSU_" . $set . "_all.fa";
+	      my $scorefile = $newpath . "aligns/scores/" . $newname . "_SSU_" . $set . "_cmscores.tab";
+	      unlink($scorefile);
+	      symlink($oldscore, $scorefile);
+	      unlink($rawfile);
+	      symlink($oldraw,   $rawfile);
+	      $outfile = $alnfile;
 	    }
+	    open( SUBFILE, ">".$outfile) || die "Can't open new sub-sample file: $!\n";
+	    push(@subfilenames, $rawfile);  # Return the raw file names, this is needed to submit
+
+	    # Reset the line count, increment the file number
+	    $lcount = 0;
+	    $fcount++;
+	  }
 	}
 	# Print this line to the file
 	print SUBFILE $_;
+      }
+      close( FULLFILE );
+      close( SUBFILE );
     }
-    close( FULLFILE );
-    close( SUBFILE );
     return @subfilenames;
 }
 
 =head2 stitch_blast
 
  Title   : stitch_blast
- Usage   : $project->stitch_blast(5);
+ Usage   : $project->stitch_blast(@list_of_files);
  Function: Concatenate several blast files together
            Files must have the filename $dir/$base_$num.$suffix
- Example : my @subsample_files = $project->split_query(5);
+ Example : my @subsample_files = $project->split_query("blast",5);
            # run blast on each input file
-           $project->stitch(@subsample_files); # put together all the blast results
+           $project->stitch_blast(@subsample_files); # put together all the blast results
  Returns : 
  Args    : 
 
@@ -787,41 +829,116 @@ sub split_query{
     
 sub stitch_blast{
  
-    my ( $self, @ffiles ) = @_;
-    my $blastpath = $self->{"db"}->{"blastout"};
-    my $SSUpath   = $self->{"db"}->{"SSU_reads"};
-    my $sampdir   = $blastpath;
-       $sampdir  =~ s/blastout/samples/g;
-
-    foreach my $set( @{ $self->{"domains"} } ){
-	my $blastsuffix  = "_SSU_" . $set . ".blast";
-	my $SSUsuffix    = "_SSU_" . $set . ".fa";
-
-	# I will cat all the blastout and SSU files together into these files
-	my $blastoutfile = $blastpath . $self->{"sample"}->{"name"} . $blastsuffix;
-	my $SSUoutfile   = $SSUpath   . $self->{"sample"}->{"name"} . $SSUsuffix;
-	# Delete them to be sure we start with a clean slate, since I will append these files
-	unlink($blastoutfile);
-	unlink($SSUoutfile);
-
-	foreach my $ffile ( @ffiles ){
-	    my ( $name, $path, $suffix ) = fileparse( $ffile, qr/\.[^.]*/ );
-	    my $subsampdir = $sampdir . $name;                       # samples/SubSampleName
+  my ( $self, @ffiles ) = @_;
+  my $blastpath = $self->{"db"}->{"blastout"};
+  my $SSUpath   = $self->{"db"}->{"SSU_reads"};
+  my $sampdir   = $blastpath;
+  $sampdir  =~ s/blastout/samples/g;
+  
+  foreach my $set( @{ $self->{"domains"} } ){
+    my $blastsuffix  = "_SSU_" . $set . ".blast";
+    my $SSUsuffix    = "_SSU_" . $set . ".fa";
+    
+    # I will cat all the blastout and SSU files together into these files
+    my $blastoutfile = $blastpath . $self->{"sample"}->{"name"} . $blastsuffix;
+    my $SSUoutfile   = $SSUpath   . $self->{"sample"}->{"name"} . $SSUsuffix;
+    # Delete them to be sure we start with a clean slate, since I will append these files
+    unlink($blastoutfile);
+    unlink($SSUoutfile);
+    
+    foreach my $ffile ( @ffiles ){
+      my ( $name, $path, $suffix ) = fileparse( $ffile, qr/\.[^.]*/ );
+      my $subsampdir = $sampdir . $name;                       # samples/SubSampleName
 	    my $bfile = $blastpath          . $name . $blastsuffix;  # The subsample's blastout file
-	    my $sfile = $subsampdir."/SSU/" . $name . $SSUsuffix;    # The subsample's SSU file
-
-	    # Put all the blast results into one file
-	    # Put all the SSU files together
-	    capture( "cat $bfile >> $blastoutfile" );
-	    capture( "cat $sfile >> $SSUoutfile"   );
-
-	    # Cleanup
-	    unlink($ffile);                  # Delete the subsample fasta file in the original directory
-	    unlink($bfile);                  # Delete the blastout file
-	    capture( "rm -rf $subsampdir");  # Delete the new sample directory that was made (this includes $sfile)
-
-	}
+      my $sfile = $subsampdir."/SSU/" . $name . $SSUsuffix;    # The subsample's SSU file
+      
+      # Put all the blast results into one file
+      # Put all the SSU files together
+      capture( "cat $bfile >> $blastoutfile" );
+      capture( "cat $sfile >> $SSUoutfile"   );
+      
+      # Cleanup
+      unlink($ffile);                  # Delete the subsample fasta file in the original directory
+      unlink($bfile);                  # Delete the blastout file
+      capture( "rm -rf $subsampdir");  # Delete the new sample directory that was made (this includes $sfile)     
     }
+  }
+}
+
+=head2 stitch_alignQC
+
+ Title   : stitch_alignQC
+ Usage   : $project->stitch_alignQC(@list_of_files);
+ Function: Concatenate several alignQC files together
+           Files must have the filename $dir/$base_$num_SSU_BAC_all_qc.fa
+ Example : my @subsample_files = $project->split_query("alignQC", 5);
+           # run alignQC on each input file
+           $project->stitch_alignQC(@subsample_files); # put together all the alignQC results
+ Returns : 
+ Args    : 
+
+=cut
+    
+sub stitch_alignQC{
+ 
+  my ( $self, @ffiles ) = @_;
+  
+  foreach my $set( @{ $self->{"domains"} } ){
+    my $alnsuffix = "_SSU_" . $set . "_all_qc.fa";    
+    my $gapsuffix = "_SSU_" . $set . "_all_qc.gap";    
+    my $FullalignQC    = $self->{"db"}->{"qc_align"} . $self->{"sample"}->{"name"} . $alnsuffix;
+    my $FullalignQCgap = $self->{"db"}->{"qc_align"} . $self->{"sample"}->{"name"} . $gapsuffix;
+    # Delete the output files to be sure we start with a clean slate
+    unlink($FullalignQC);
+    unlink($FullalignQCgap);
+    my $numseq = 0;
+    my @coverage = ();
+
+    foreach my $ffile ( @ffiles ){
+      my ($samplenm, $subsampdir, $suffix) = fileparse( $ffile, qr/\.[^.]*/ );
+      $subsampdir =~ s/raw\///;
+      my $alnfile =  $ffile;
+      $alnfile    =~ s/raw/aligns\/qc/;
+      $alnfile    =~ s/$suffix/$alnsuffix/;
+      my $gapfile =  $alnfile;
+      $gapfile    =~ s/$alnsuffix/$gapsuffix/;
+      # cat all the alignment lines together
+      capture( "cat $alnfile >> $FullalignQC" );
+      # Keep a running total of the average files
+      open( GAP, "$gapfile" ) || die "can't open output $gapfile in stitch_alignQC:$!\n";
+      my $seqs = <GAP>;
+      $numseq  = $numseq + $seqs;
+      my $cov_str = <GAP>;
+      my @cov = split(" ",$cov_str);
+      if( @coverage ){
+	my $nres = @coverage;
+	for( my $i=0; $i<$nres; $i++ ){
+	  $coverage[$i] = $coverage[$i] + $cov[$i]; # Accumulate the coverage
+	}
+      } else {
+	@coverage = @cov;
+      }
+      close GAP;
+      
+      # Delete the new sample directory that was made
+      capture( "rm -rf $subsampdir");  
+      
+    }
+    open( GAP, ">>$FullalignQCgap" ) || die "can't open output $FullalignQCgap in stitch_alignQC:$!\n";
+    # Print the total number of sequences
+    print GAP "$numseq\n";
+    # Print the coverage
+    my $format = ("%1.0f " x @coverage)."\n";
+    printf GAP $format, @coverage;
+    # Print the % coverage
+    my $nres = @coverage;
+    for( my $i=0; $i< $nres; $i++ ){
+      $coverage[$i] = $coverage[$i]/$numseq;
+    }  
+    $format = ("%1.5f " x @coverage)."\n";
+    printf GAP $format, @coverage;
+    close GAP;
+  }
 }
 
 

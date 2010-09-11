@@ -9,12 +9,21 @@ use IPC::System::Simple qw(capture $EXITVAL);
 my ( $samp_path, $sim_read2source_tab );
 my $reference_tree = "SSU_BAC_ref_unaln_SSU_BAC_FT_pseudo_pruned_fmt.tree";
 my $is_sim = 0;
-my $numpara = 1; #number of parallel blast jobs to run
+my $numblast = 1; #number of parallel blast jobs to run
+  # -1 = run only blast and then quit (for parallel jobs)
+  # 0  = skip blast and begin the code with run_cmalign
+  # 1  = run one blast (non-parallel)
+  # >1 = number of parallel blast jobs to run
+my $numalnQC = 1; #number of parallel alignment QC jobs to run 
+  # -1 = run only alignqc, skip blast, clustering, etc. (for parallel jobs)
+  # 1  = run one alignqc (non-parallel)
+  # >1 = number of parallel alignQC jobs to run
 GetOptions(
     'i=s' => \$samp_path,
     'sim' => \$is_sim,
     'r=s' => \$reference_tree,
-    'p=i' => \$numpara,
+    'b=i' => \$numblast,
+    'a=i' => \$numalnQC,
     );
 
 if( $is_sim ){
@@ -35,7 +44,6 @@ my $seqlencut    = 100;
 my $clust_cutoff = 0.05;
 my $clust_method = "average";
 my $tree_method  = "fasttree";
-
 #######################################
 # SET UP FLAT FILE DATABASE STRUCTURE #
 #######################################
@@ -55,23 +63,34 @@ $project->set_tree_method( $tree_method );
 $project->build_db( $masterdir );
 $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
 #$project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
-if( $numpara > 1 ){
-    parallel_blast( $ecutoff );
-} else {
+
+#######################################
+# Now get to work
+#######################################
+
+if( $numalnQC != -1 && $numblast != 0){  # -1 means run only alignQC
+  if( $numblast > 1 ){
+    parallel( "blast" );
+  } elsif( abs($numblast) == 1 ){  # 1 normal, -1 parallel mode
     $project->run_SSU_blast( $ecutoff );
     $project->load_blastreports;
     $project->grab_SSU_reads( $ecutoff, $trim ); 
-}
-if( $numpara < 1 ){
-    # Negative values are a flag indicating this is 
-    # being run in parallel for only the blast portion
-    # Now that that is finshed, quit
-    # (This is done below in the submit() function)
+  }
+  if( $numblast == -1 ){           # parallel mode, only run blast then quit
     exit;
+  }
+  $project->run_cmalign();
+  $project->format_alignments();
 }
-$project->run_cmalign();
-$project->format_alignments();
-$project->run_align_qc( $seqlencut );
+
+if( $numalnQC > 1 ){
+  parallel ( "alignQC" );
+} else {                           # 1 normal, -1 parallel mode
+  $project->run_align_qc( $seqlencut, $numalnQC );
+  if( $numalnQC == -1 ){           # parallel mode, only run alignQC then quit
+    exit;
+  }
+}
 
 #turn these on contingent upon simulation needs
 #$project->build_read2source_tab();
@@ -93,55 +112,67 @@ else{
   $project->run_mothur( $clust_cutoff, $clust_method );
 }
 
-
 ##############################################################################
 # Send out scripts to run the blast step in parallel
 # The queue commands may need to be modified on other systems
 ##############################################################################
-sub parallel_blast
+sub parallel
 {
+  # Split up the sample into $numblast subsamples and blast/alignQC all the subsamples in parallel
 
-    # Split up the sample into $numpara subsamples and blast all the subsamples in parallel
-    my @subsample_files = $project->split_query($numpara);
+  my $type = shift;
+  my @subsample_files;
+  my $option;
+  my @qID;
 
-    # loop over each subsample of queries and submit them
-    my @qID;
-    foreach my $subsample ( @subsample_files ){
-	push(@qID, submit($subsample) );
-    }
-    my $jobs_running = scalar(@qID);
+  if( $type =~ "blast"){
+    $option = " -b -1";
+    @subsample_files = $project->split_query($type, $numblast);
+  } elsif($type =~ "alignQC") {
+    @subsample_files = $project->split_query($type, $numalnQC);
+    $option = " -a -1";
+  }
 
-    # Check if some or all jobs are finished
-    while ( $jobs_running > 0 ){
-	# Something is still running, so wait 5 more minutes
-	sleep(60);
-	# loop through jobs to see if any are done
-	for( my $i=0; $i<scalar(@qID); $i++ ){
-	    # I'm only interested in files that are done but I haven't flagged them as 0 yet
-	    if( $qID[$i]!=0  &&  !`qstat | grep $qID[$i]` ){
-		# This job recently finished, check if everything ran ok
-		my $outfile = "logs/".$qID[$i].".all";
-		if( !(`tail -1 $outfile` =~ m/RUN FINISHED/ )){
-		    # The node crashed, resubmit this job
-		    print "Rerunning file ".$i." as it seems the node failed\n";
-		    $qID[$i] = submit($i);
-		} elsif (`grep -i error $outfile`){
-		    # blast crashed, quit (or I could change this to retry....)
-		    print "Blast crashed or something else went wrong with file ".$i.", I quit\n";
-		    exit(0);
-		} else {
-		    # Everything ran fine, remove this job from the list
-		    print "Job ".$qID[$i]." on subsample ".$i." finished sucessfully\n";
-		    $qID[$i] = 0;
-		    $jobs_running--;
-		}
-	    }
+  # loop over each subsample of queries and submit them
+  foreach my $subsample ( @subsample_files ){
+    push(@qID, submit($subsample.$option) );
+  }
+  my $jobs_running = scalar(@qID);
+  
+  # Check if some or all jobs are finished
+  while ( $jobs_running > 0 ){
+    # Something is still running, so wait another minute
+    sleep(60);
+    # loop through jobs to see if any are done
+    for( my $i=0; $i<scalar(@qID); $i++ ){
+      # I'm only interested in files that are done but I haven't flagged them as 0 yet
+      if( $qID[$i]!=0  &&  !`qstat | grep $qID[$i]` ){
+	# This job recently finished, check if everything ran ok
+	my $outfile = "logs/".$qID[$i].".all";
+	if( !(`tail -1 $outfile` =~ m/RUN FINISHED/ )){
+	  # The node crashed, resubmit this job
+	  print "Rerunning file ".$i." as it seems the node failed\n";
+	  $qID[$i] = submit($i.$option);
+	} elsif (`grep -i error $outfile`){
+	  # code crashed, quit (or I could change this to retry....)
+	  print $type." crashed or something else went wrong with file ".$i.", I quit\n";
+	  exit(0);
+	} else {
+	  # Everything ran fine, remove this job from the list
+	  print "Job ".$qID[$i]." on subsample ".$i." finished sucessfully\n";
+	  $qID[$i] = 0;
+	  $jobs_running--;
 	}
+      }
     }
-
-    # Stich all the results back together and put them in the expected path/file
+  }
+  
+  # Stich all the results back together and put them in the expected path/file
+  if( $type =~ "blast"){
     $project->stitch_blast(@subsample_files);
-    
+  } elsif($type =~ "alignQC") {
+    $project->stitch_alignQC(@subsample_files);
+  }
 }
 
 
@@ -151,19 +182,21 @@ sub parallel_blast
 ##############################################################
 sub submit
 {
-    my $subsample = shift;
-
-    # the run_otu_handler_parallel.sh script must be configured properly for your batch system
-    my $command = "./run_otu_handler_parallel.sh -i ".$subsample." -p -1";
-    my $result = capture( "qsub $command" );
-    # Should return a string like 
-    # Your job 4827092 ("run_otu_handler_parallel.sh") has been submitted
-    # grab the job # only
-    my @values = split(' ', $result);
-    if( $values[2] =~ /\d/ ){
-	return $values[2];
-    } else {
-	return 0;
-    }
-
+  my $subsample = shift;
+  
+  # the run_otu_handler_parallel.sh script must be configured properly for your batch system
+  my $command = "./run_otu_handler.sh -i ".$subsample;
+  my $result = capture( "qsub $command" );
+  print( "qsub $command" );
+  # Should return a string like 
+  # Your job 4827092 ("run_otu_handler_parallel.sh") has been submitted
+  # grab the job # only
+  my @values = split(' ', $result);
+  if( $values[2] =~ /\d/ ){
+    print( "\t JOB_ID=$values[2]\n");
+    return $values[2];
+  } else {
+    return 0;
+  }
+  
 }
