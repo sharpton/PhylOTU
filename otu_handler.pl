@@ -37,9 +37,14 @@ print "Processing $samp_path\n";
 #my @domains   = qw(BAC ARC);
 my @domains   = qw( BAC );
 my $ecutoff   = 0.000001;
-my $trim      = 1; #binary. When on, splices non-homologous sequence linked to 16S read
-my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
-my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
+my $trim      = 2; #Should the reads be trimmed to just the 16S sequence via blast analysis?
+                   #0 = no trimming, use complete read
+                   #1 = trim to the top HSP coordinates
+                   #2 = tile HSPs from top hit, use the best tile, and trim to this tile's coordinates
+#my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
+my $masterdir    = "/Users/sharpton/projects/OTU/db/"; #upper level directory
+#my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
+my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
 my $seqlencut    = 100;
 my $clust_cutoff = 0.05;
 my $clust_method = "average";
@@ -51,7 +56,6 @@ my $tree_method  = "fasttree";
 #sim 2 (readsource sim) is testing how reads and sources co cluster on same tree
 #sim 3 is prune sim with padded ends; ultrashort and 2 reads/source
 my $simtype = 3;
-
 my $project = OTU->new();
 if( $is_sim ){
     $project->set_simulation();

@@ -7,6 +7,7 @@ use Bio::SeqIO;
 use Bio::AlignIO;
 use Bio::TreeIO;
 use Bio::SearchIO;
+use Bio::Search::Tiling::MapTiling;
 use Bio::Phylo::IO 'parse';
 use File::Basename;
 use File::Path qw( make_path );
@@ -257,15 +258,18 @@ sub run_SSU_blast{
  Function: Open blastoutputs for each set and determine which sample reads
            exhibit significant similarity to SSU blast database sequences.
            The hit score is used to determine which set a read belongs 
-           to; sample reads can only belong to one set! If trim is true, 
+           to; sample reads can only belong to one set! If trim is 1 or 2 (not 0), 
            then reads with non-SSU-homologous sequences are trimmed down 
-           to just the homologous subsequence.
+           to just the homologous subsequence. 
+           Trim = 0 results in no triming.
+           Trim = 1 uses the top HSP coordinates to trim the sequence. 
+           Trim = 2 uses the top HSP tiling coordinates to trim.           
  Example : my $ecutoff =  0.00001;
            my $trim    = 1;
            $project->grab_SSU_reads( $ecutoff, $trim );
  Returns : 1 upon success
  Args    : A scalar of the evalue cutoff used to determine significance and
-           a binary of whether to employ read trimming. 
+           a scalar of whether to employ read trimming and what trimming method
 
 =cut
 
@@ -281,60 +285,111 @@ sub grab_SSU_reads{
 	my $in = new Bio::SearchIO(-format => 'blasttable', -file => $blastreport);
         RESULT: while( my $result = $in->next_result ) {
 	    while( my $hit = $result->next_hit ) {
-		while( my $hsp = $hit->next_hsp ) {
-		    #we're only going to evaluate the top hit
-		    if( $hsp->evalue() < $ecutoff ){ 
-			my $qstart  = $hsp->start('query');
-			my $qstop   = $hsp->end('query');
-#			my $score   = $hit->raw_score;
-			my $score   = $hsp->bits;
-			my $qstrand = $hit->strand("query");
-			my $hstrand = $hit->strand("hit");
-			#TURNED OFF FOR BLASTTABLE FORMATTING PURPOSES
-#			my $qlen   = $result->query_length;
-#			if($qstart > $qlen || $qstop > $qlen){
-#			    die("HSP query coordinates out of bounds: query length is $qlen, while qhsp start is $qstart and qhsp stop is $qstop for ". $result->query_name . "\n"
-#				);
-#			}
-			#grab the passing items, store the best set's hsp results
-			if( defined( $self->{"bhits"}->{$result->query_name} ) ){
-			    print Dumper ($self->{"bhits"}->{$result->query_name} );
-			    print "set is $set\n";
-			    print " comparing results for " . $result->query_name . "\n";
-			    my $old_score = $self->{"bhits"}->{$result->query_name}->{"score"};
-			    print "  score: $score\n";
-			    print "  old:   $old_score\n";
-			    if ($score > $old_score ){
-				$self->{"bhits"}->{$result->query_name} = { 
-				    'set'     => $set,
-				    'qstart'  => $qstart,
-				    'qstop'   => $qstop,
-				    'score'   => $score,
-				    'qstrand' => $qstrand,
-				    'hstrand' => $hstrand,
-				};
-			    }
-			}
-			else{
-			    $self->{"bhits"}->{$result->query_name} = { 
-				'set'     => $set,
-				'qstart'  => $qstart,
-				'qstop'   => $qstop,
-				'score'   => $score,
-				'qstrand' => $qstrand,
-				'hstrand' => $hstrand,
-			    };
-			}
-			next RESULT;
-		    }
+	      if( $qc == 2 ){
+		#evaluate the top hsp tile from the top blast hit
+		my $tiling = Bio::Search::Tiling::MapTiling->new($hit);
+		my @top_tile_hsps = $tiling->next_tiling( 'query' );
+		#process the top hsp to initialize the tile
+		my $top_hsp = pop( @top_tile_hsps );
+		next unless( $top_hsp->evalue() < $ecutoff );
+		my $qstart = $top_hsp->start('query');
+		my $qstop  = $top_hsp->end('query');
+		my $score  = $top_hsp->bits;
+		my $qstrand = $top_hsp->strand('query');
+		my $hstrand = $top_hsp->strand('hit');
+		my $nhsps   = 1;
+		#Uncomment the below for troubleshooting
+		#print join( "\t", "." , ".", $result->query_name, $hit->name, $top_hsp->start('query'), $top_hsp->end('query'), $qstart, $qstop, "\n");		  
+		#loop through the remaining hsps in the tile
+		foreach my $hsp( @top_tile_hsps ){
+		  next unless ( $hsp->evalue() < $ecutoff );
+		  #update the query coordinates for trimming
+		  if( $qstart > $hsp->start('query') ){
+		    $qstart = $hsp->start('query');
+		  }
+		  if( $qstop < $hsp->end('query') ){
+		    $qstop = $hsp->end('query');
+		  }
+		  $score = $score + $hsp->bits;
+		  #make sure the tile mapping kept consistent tile context (strands are the same across all hsps w/in tile)
+		  if( ( $hsp->strand('query') != $qstrand ) || ( $hsp->strand('hit') != $hstrand) ){
+		    warn( "ERROR IN grab_SSU_reads: Strands differ between HSPs in the same tile, passing analysis on " . 
+			  $result->query_name. " (top hit was " . $hit->name . ")\n");
+		    next RESULT;
+		  }
+		  #Uncomment the below for troubleshooting
+		  #print join( "\t", "." , ".", $result->query_name, $hit->name, $hsp->start('query'), $hsp->end('query'), $qstart, $qstop, "\n");	  
 		}
+		my $avg_score = $score / $nhsps;
+		$self->{"bhits"}->{$result->query_name} = { 
+							   'set'     => $set,
+							   'qstart'  => $qstart,
+							   'qstop'   => $qstop,
+							   'score'   => $avg_score,
+							   'qstrand' => $qstrand,
+							   'hstrand' => $hstrand,
+							  };
+		next RESULT;
+	      }
+	      else{
+		while( my $hsp = $hit->next_hsp ) {
+		  #we're only going to evaluate the top hit
+		  if( $hsp->evalue() < $ecutoff ){ 
+		    my $qstart  = $hsp->start('query');
+		    my $qstop   = $hsp->end('query');
+		    #			my $score   = $hit->raw_score;
+		    my $score   = $hsp->bits;
+		    my $qstrand = $hit->strand("query");
+		    my $hstrand = $hit->strand("hit");
+		    #TURNED OFF FOR BLASTTABLE FORMATTING PURPOSES
+		    #my $qlen   = $result->query_length;
+		    #if($qstart > $qlen || $qstop > $qlen){
+		    #die("HSP query coordinates out of bounds: query length is $qlen, while qhsp start is $qstart and qhsp stop is $qstop for ". $result->query_name . "\n"
+		    #);
+		    #}
+		    #grab the passing items, store the best set's hsp results
+		    if( defined( $self->{"bhits"}->{$result->query_name} ) ){
+		      print Dumper ($self->{"bhits"}->{$result->query_name} );
+		      print "set is $set\n";
+		      print " comparing results for " . $result->query_name . "\n";
+		      my $old_score = $self->{"bhits"}->{$result->query_name}->{"score"};
+		      print "  score: $score\n";
+		      print "  old:   $old_score\n";
+		      if ($score > $old_score ){
+			$self->{"bhits"}->{$result->query_name} = { 
+								   'set'     => $set,
+								   'qstart'  => $qstart,
+								   'qstop'   => $qstop,
+								   'score'   => $score,
+								   'qstrand' => $qstrand,
+								   'hstrand' => $hstrand,
+								  };
+		      }
+		    }
+		    else{
+		      $self->{"bhits"}->{$result->query_name} = { 
+								 'set'     => $set,
+								 'qstart'  => $qstart,
+								 'qstop'   => $qstop,
+								 'score'   => $score,
+								 'qstrand' => $qstrand,
+								 'hstrand' => $hstrand,
+								};
+		    }
+		    next RESULT;
+		  }
+		}
+	      }
 	    }
-	}
-    }
+	  }
+      }
     #Grab reads that pass thresholds
     print "Grabbing passing libary reads\n";
-    if($qc){
-	print "Quality control is ON\n";
+    if($qc == 1 ){
+      print "Quality control is ON; trimming to top HSP coordinates\n";
+    }
+    if($qc == 2){
+      print "Quality control is ON; tiling top hit HSPs, trimming linked coordinates\n";
     }
     my $seq_in = Bio::SeqIO->new(-format  => 'fasta', 
 				 -file  => $self->{"db"}->{"reads"} . $self->{"sample"}->{"file"},
@@ -356,8 +411,8 @@ sub grab_SSU_reads{
 	    #Consider if this should be exact match or not...
 	    if( $passing_id eq $id ){
 		print "match at $passing_id and $id\n";
-		if($qc){
-		    #grab only homologous subsequences of $seq
+		if($qc == 1 || $qc == 2){
+		    #grab only homologous subsequences of $seq from top HSP
 		    my $qstart = $hsp_data{'qstart'};
 		    my $qstop  = $hsp_data{'qstop'};
 		    #ADDED THE LENGTH CHECK HERE DUE TO BLASTTABLE, SEE ABOVE
