@@ -36,14 +36,16 @@ int main(int argc, char *argv[])
 
   /////////////////////////////////////////
   // PRINT OUT THE HEADER (only before top row)
-  if( startrow==0 ){
-    for( int j=0; j < tr->size(); j++ ){
-      if( (*tr)[j].children.size()==0 ){
-	outfile << "\"" << (*tr)[j].name.c_str() << "\" ";
-      }
-    }
-    outfile << std::endl;
-  }
+  outfile << tr->getNleaves() << std::endl;
+  //  R format (not used)
+  //  if( startrow==0 ){
+  //    for( int j=0; j < tr->size(); j++ ){
+  //      if( (*tr)[j].children.size()==0 ){
+  //	outfile << "\"" << (*tr)[j].name.c_str() << "\" ";
+  //      }
+  //    }
+  //    outfile << std::endl;
+  //  }
 
   /////////////////////////////////////////
   // DEFINE SOME STUFF
