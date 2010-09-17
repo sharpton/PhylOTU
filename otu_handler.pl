@@ -8,24 +8,38 @@ use IPC::System::Simple qw(capture $EXITVAL);
 
 my ( $samp_path, $sim_read2source_tab );
 my $reference_tree = "SSU_BAC_ref_unaln_SSU_BAC_FT_pseudo_pruned_fmt.tree";
-my $is_sim = 0;
-my $numblast = 1; #number of parallel blast jobs to run
-  # -1 = run only blast and then quit (for parallel jobs)
-  # 0  = skip blast and begin the code with run_cmalign
-  # 1  = run one blast (non-parallel)
+my $is_sim     = 0;
+my $numblast   = 1;
+  # -1 = run only blast (for parallel jobs)
+  # 1  = run one blast
   # >1 = number of parallel blast jobs to run
-my $numalnQC = 1; #number of parallel alignment QC jobs to run 
-  # -1 = run only alignqc, skip blast, clustering, etc. (for parallel jobs)
-  # 1  = run one alignqc (non-parallel)
+my $numalnQC   = 1;
+  # -1 = run only alignqc (for parallel jobs)
+  # 1  = run one alignqc
   # >1 = number of parallel alignQC jobs to run
+my $numTreeMat = 1;
+  # -1 = run only tree_to_matrix (for parallel jobs)
+  # 1  = run one tree_to_matrix
+  # >1 = number of parallel tree_to_matrix jobs to run
+my $startMat   = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
+my $endMat     = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
+my $skipto     = ""; # skip to (A)lignment, alignment(Q)c, (T)ree, tree2(M)atrix, (C)lustering 
 GetOptions(
     'i=s' => \$samp_path,
     'sim' => \$is_sim,
     'r=s' => \$reference_tree,
     'b=i' => \$numblast,
     'a=i' => \$numalnQC,
+    'm=i' => \$numTreeMat,
+    's=i' => \$startMat,
+    'e=i' => \$endMat,
+    'k=s' => \$skipto,
     );
-
+if( $numTreeMat > 0 && ( $startMat!=0 || $endMat!=0 )){
+  print "tree_to_matrix not running in parallel mode, start and end step to full matrix printing\n";
+  $startMat = 0;
+  $endMat   = 0;
+}
 if( $is_sim ){
     print "You are running handler for simulations!\n";    
 }
@@ -41,14 +55,17 @@ my $trim      = 2; #Should the reads be trimmed to just the 16S sequence via bla
                    #0 = no trimming, use complete read
                    #1 = trim to the top HSP coordinates
                    #2 = tile HSPs from top hit, use the best tile, and trim to this tile's coordinates
-#my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
-my $masterdir    = "/Users/sharpton/projects/OTU/db/"; #upper level directory
-#my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
-my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
+my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
+#my $masterdir    = "/Users/sharpton/projects/OTU/db/"; #upper level directory
+my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
+#my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
 my $seqlencut    = 100;
 my $clust_cutoff = 0.05;
 my $clust_method = "average";
 my $tree_method  = "fasttree";
+my $tree_to_matrix_code = "c";
+  # c = c++ code, output formatted for mothur (will implement ESPRIT if needed)
+  # R = R script, output formatted for mothur
 #######################################
 # SET UP FLAT FILE DATABASE STRUCTURE #
 #######################################
@@ -69,37 +86,46 @@ $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
 #$project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
 
 #######################################
+# Jump to the appropriate step
+#######################################
+if( $numalnQC   == -1  ){ print "Skipping to alignment\n";      goto ALIGNQC; }
+if( $numTreeMat == -1  ){ print "Skipping to tree_to_matrix\n"; goto TREE2MATRIX; }
+if( $skipto     eq "A" ){ print "Skipping to alignment\n";      goto ALIGN; }
+if( $skipto     eq "Q" ){ print "Skipping to alignentQC\n";     goto ALIGNQC; }
+if( $skipto     eq "T" ){ print "Skipping to tree creation\n";  goto TREE; }
+if( $skipto     eq "M" ){ print "Skipping to tree_to_matrix\n"; goto TREE2MATRIX; }
+if( $skipto     eq "C" ){ print "Skipping to clustering\n";     goto CLUSTER; }
+
+#######################################
 # Now get to work
 #######################################
 
-if( $numalnQC != -1 && $numblast != 0){  # -1 means run only alignQC
-  if( $numblast > 1 ){
-    parallel( "blast" );
-  } elsif( abs($numblast) == 1 ){  # 1 normal, -1 parallel mode
-    $project->run_SSU_blast( $ecutoff );
-    $project->load_blastreports;
-    $project->grab_SSU_reads( $ecutoff, $trim ); 
-  }
-  if( $numblast == -1 ){           # parallel mode, only run blast then quit
-    exit;
-  }
-  $project->run_cmalign();
-  $project->format_alignments();
+if( $numblast > 1 ){
+  parallel( "blast" );
+} else {
+  $project->run_SSU_blast( $ecutoff );
+  $project->load_blastreports;
+  $project->grab_SSU_reads( $ecutoff, $trim ); 
+  if( $numblast == -1 ){ exit; }  # parallel mode, only run blast then quit
 }
 
+ALIGN:
+$project->run_cmalign();
+$project->format_alignments();
+
+ALIGNQC:
 if( $numalnQC > 1 ){
   parallel ( "alignQC" );
-} else {                           # 1 normal, -1 parallel mode
+} else {
   $project->run_align_qc( $seqlencut, $numalnQC );
-  if( $numalnQC == -1 ){           # parallel mode, only run alignQC then quit
-    exit;
-  }
+  if( $numalnQC == -1 ){ exit; } # parallel mode, only run alignQC then quit
 }
 
 #turn these on contingent upon simulation needs
 #$project->build_read2source_tab();
 #$project->prune_alignment( $simtype ); #simulation specific function for sim 1
 
+TREE:
 $project->run_tree(); 
 #$project->align_to_seqs();
 
@@ -111,18 +137,34 @@ if( $simtype == 1 ){
 }
 else{
   $project->prune_tips();
-  $project->tree_to_matrix();
-  $project->format_matrix_to_phylip();
+
+TREE2MATRIX:
+  if( $numTreeMat > 1 ){
+    parallel("tree_to_matrix");
+  } else {
+    if(      $tree_to_matrix_code =~ 'R' ){
+      $project->tree_to_matrix_R();
+      $project->format_matrix_to_phylip();
+    } elsif( $tree_to_matrix_code =~ 'c' ){
+      $project->tree_to_matrix_cpp($startMat, $endMat);
+    } else {
+      print "Unknown tree_to_matrix_code version: $tree_to_matrix_code, quitting\n";
+      exit;
+    }
+    if( $numTreeMat == -1 ){ exit; } # parallel mode, only run tree_to_matrix then quit
+  }
+
+CLUSTER:
   $project->run_mothur( $clust_cutoff, $clust_method );
 }
 
 ##############################################################################
-# Send out scripts to run the blast step in parallel
+# Send out scripts to run steps in parallel
 # The queue commands may need to be modified on other systems
 ##############################################################################
 sub parallel
 {
-  # Split up the sample into $numblast subsamples and blast/alignQC all the subsamples in parallel
+  # Split up the sample into subsamples and blast/alignQC/tree_to_matrix all the subsamples in parallel
 
   my $type = shift;
   my @subsample_files;
@@ -135,6 +177,10 @@ sub parallel
   } elsif($type =~ "alignQC") {
     @subsample_files = $project->split_query($type, $numalnQC);
     $option = " -a -1";
+  } elsif($type =~ "tree_to_matrix") {
+    # The subsample_files text here already include the options -s START -e END
+    @subsample_files = $project->split_tree($numTreeMat);
+    $option = " -m -1";
   }
 
   # loop over each subsample of queries and submit them
@@ -176,6 +222,8 @@ sub parallel
     $project->stitch_blast(@subsample_files);
   } elsif($type =~ "alignQC") {
     $project->stitch_alignQC(@subsample_files);
+  } elsif($type =~ "tree_to_matrix") {
+    $project->stitch_matrix(@subsample_files);
   }
 }
 

@@ -681,20 +681,20 @@ sub prune_tips{
     return $self;
 }
 
-=head2 tree_to_matrix
+=head2 tree_to_matrix_R
 
- Title   : tree_to_matrix
- Usage   : $project->tree_to_matrix();
+ Title   : tree_to_matrix_R
+ Usage   : $project->tree_to_matrix_R();
  Function: Wrapper for tree_to_matrix.R, which is released with this package and
            converts a newick tree to a phylip formatted distance matrix. Execution
            requires R and the ape R library. 
- Example : $project->tree_to_matrix();
+ Example : $project->tree_to_matrix_R();
  Returns : None
  Args    : None
 
 =cut
 
-sub tree_to_matrix{
+sub tree_to_matrix_R{
   #Call an R script with the following:
   my ( $self )  = shift;
   my @domains   = @{ $self->{"domains"} };
@@ -712,6 +712,48 @@ sub tree_to_matrix{
     }
   }
 }
+
+=head2 tree_to_matrix_cpp
+
+ Title   : tree_to_matrix_cpp
+ Usage   : $project->tree_to_matrix_cpp(start,end);
+ Function: Wrapper for tree_to_matrix.cpp, which is released with this package and
+           converts a newick tree to a phylip formatted distance matrix. 
+           Compilation requires PhyloTree.h and the Boost c++ library. 
+           g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
+ Example : $project->tree_to_matrix_cpp(0, 100);
+ Returns : None
+ Args    : starting (from 0) and ending rows of the matrix to print to file.
+           If start=end=0 the entire matrix is printed
+
+=cut
+
+sub tree_to_matrix_cpp{
+  #Call an c++ script with the following:
+  my $self;
+  my $mstart = 0;
+  my $mend   = 0;
+  ( $self, $mstart, $mend )  = @_;
+  my @domains   = @{ $self->{"domains"} };
+  my $set_ct    = 0;
+  my $tag = "";
+  if( $mend != 0 ){
+    $tag = "_row".$mstart."to".$mend;
+  }
+  foreach my $set ( @domains) { 
+    my $intree    = $self->{"db"}->{"tree"}   . $self->{"sample"}->{"name"} .        "_SSU_" . $set . "_FT_pseudo_pruned.tree";
+    my $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . $tag . "_SSU_" . $set . "_FT_pseudo_pruned.phymat";
+    my @args = ();
+    @args = ( "$intree", "$outmat", "$mstart", "$mend");
+    print "Running ./tree_to_matrix @args\n";
+    my $results = capture( "./tree_to_matrix @args" );
+    if( $EXITVAL != 0 ){
+      warn("Error running tree_to_matrix for $intree!\n");
+      exit(0);
+    }
+  }
+}
+
 
 sub format_matrix_to_phylip{
     my $self   = shift;
@@ -868,6 +910,45 @@ sub split_query{
     return @subfilenames;
 }
 
+=head2 split_tree
+
+ Title   : split_tree
+ Usage   : $project->split_tree($num);
+ Function: Figure out how to split up the tree_to_matrix printing
+ Example : my @subsample_files =$project->split_tree(5)
+           # run tree_to_matrix each part of the tree
+           $project->stitch_matrix(@subsample_files); # put together all the matrices
+ Returns : Array of the commands to submit
+ Args    : The tree is split into $num parts, with an equal number of leaves in each
+
+=cut
+
+sub split_tree{
+
+  my ( $self, $num ) = @_;
+  my @domains   = @{ $self->{"domains"} };
+  my @subfilenames;        # commands to run
+  foreach my $set ( @domains ){
+    my $infile  = $self->{"sample"}->{"path"};
+    my $qcaln   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc.fa";
+    my $refaln  = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_ref.fa";
+    my $nleaves = capture( "grep -c \">\" \"$qcaln\"") - capture( "grep -c \">\" \"$refaln\"");
+    my $step    = ceil( $nleaves/$num );
+    my $start   = 0;
+    my $end     = $step;
+    print "splitting ".$infile." tree_to_matrix printing into ".$num." jobs with ".$step." rows each\n";
+    while( $start < $nleaves ){
+      my $command = $infile . " -s $start -e $end";
+      push(@subfilenames, $command);
+      $start = $end   + 1;
+      $end   = $start + $step;
+    }
+    return @subfilenames;
+  }
+
+}
+
+
 =head2 stitch_blast
 
  Title   : stitch_blast
@@ -994,6 +1075,43 @@ sub stitch_alignQC{
     printf GAP $format, @coverage;
     close GAP;
   }
+}
+
+=head2 stitch_matrix
+
+ Title   : stitch_matrix
+ Usage   : $project->stitch_matrix(@list_of_commands);
+ Function: Concatenate several matrix files together
+           Files must have the filename $dir/matrix/$base_row$Xto$Y_SSU_BAC_FT_pseudo_pruned.phymat
+ Example : my @subsample_files = $project->split_tree(5);
+           # run tree_to_matrix on each part of the tree
+           $project->stitch_matrix(@subsample_files); # put together all the matrices
+ Returns :
+ Args    : list of command with start/end rows indicated
+
+=cut
+
+sub stitch_matrix{
+
+  my ( $self, @ffiles ) = @_;
+  
+  foreach my $set( @{ $self->{"domains"} } ){
+    my $base       = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"};
+    my $suffix     = "_SSU_" . $set . "_FT_pseudo_pruned.phymat";
+    my $Fullmatrix = $base . $suffix;
+    # Delete the output files to be sure we start with a clean slate
+    unlink($Fullmatrix);
+
+    foreach my $command ( @ffiles ){
+      my( $infile, $s, $start, $e, $end ) = split(' ', $command);
+      my $tag     = "_row".$start."to".$end;
+      my $subfile = $base . $tag . $suffix;
+      # cat all the alignment lines together
+      capture( "cat $subfile >> $Fullmatrix" );
+      unlink($subfile);
+    }
+  }
+
 }
 
 
