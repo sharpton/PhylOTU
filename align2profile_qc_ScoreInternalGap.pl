@@ -177,6 +177,9 @@ while( my $aln = $in_aln->next_aln() ){
   printf GAP $format, @coverage;
   close GAP;
 
+  if( $flat ){
+    $aln->set_displayname_flat();
+  }
   $out_aln->write_aln($aln);
 #  $now = localtime time;  print"Done align2profile at $now\n";
   

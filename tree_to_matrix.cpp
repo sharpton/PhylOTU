@@ -21,10 +21,30 @@ int main(int argc, char *argv[])
 
   /////////////////////////////////////////
   // READ IN TREE FROM FILE
+  if( argc < 6 || argc > 8){
+    std::cout << "Wrong number of input arguments (" << argc << "), should have format:\n";
+    std::cout << "\ttree_to_matrix <infile> <outfile> <starting_row> <ending_row> <format M=matrix E=esprit> [outfile_freq] [maxdistance(E format only)]\n";
+  }
   char* infilename  = argv[1];
   char* outfilename = argv[2];
   int startrow = atoi(argv[3]);
   int endrow   = atoi(argv[4]);
+  char format       = argv[5][0];
+  //    M = matrix format, used by mothur
+  //    E = ESPRIT list format
+  char* frqfilename;
+  float maxdist;
+  if( argc == 8 ){
+    frqfilename      = argv[6];
+    maxdist     = atof(argv[7]);
+    std::cout << frqfilename << " " << maxdist << std::endl;
+  } else {
+    if( format == 'E' ){
+      std::cerr << "maximum distance required for ESPRIT printout; quitting\n";
+      return EXIT_FAILURE;
+    }
+  }
+  int srow = startrow;
   std::cout << "Reading in " << infilename << std::endl;
   PhyloTree<TreeNode>* tr = new PhyloTree<TreeNode>();
   std::ifstream infile;
@@ -33,20 +53,32 @@ int main(int argc, char *argv[])
   std::ofstream outfile;
   outfile.open(outfilename);
   outfile.precision(5);
-
   /////////////////////////////////////////
   // PRINT OUT THE HEADER (only before top row)
-  outfile << tr->getNleaves() << std::endl;
-  //  R format (not used)
-  //  if( startrow==0 ){
-  //    for( int j=0; j < tr->size(); j++ ){
-  //      if( (*tr)[j].children.size()==0 ){
-  //	outfile << "\"" << (*tr)[j].name.c_str() << "\" ";
-  //      }
-  //    }
-  //    outfile << std::endl;
-  //  }
-
+  if( startrow==0 ){
+    if( format == 'M' ){
+      // phylip format
+      outfile << tr->getNleaves() << std::endl;
+      //R format (not used)
+      for( int j=0; j < tr->size(); j++ ){
+	if( (*tr)[j].children.size()==0 ){
+	  outfile << "\"" << (*tr)[j].name.c_str() << "\" ";
+	}
+      }
+      outfile << std::endl;
+    } else if( format == 'E' ){
+      // Print out frequency file, which also provide a map from ID name to index #
+      std::ofstream frqfile;
+      frqfile.open(frqfilename);
+      for( int j=0; j < tr->size(); j++ ){
+	if( (*tr)[j].children.size()==0 ){
+	  frqfile << (*tr)[j].name.c_str() << " 1" << std::endl;
+	}
+      }
+      frqfile.close();
+    }
+  }
+  
   /////////////////////////////////////////
   // DEFINE SOME STUFF
   typedef adjacency_list < listS, vecS, undirectedS,
@@ -113,9 +145,10 @@ int main(int argc, char *argv[])
   
   /////////////////////////////////////////
   // LOOP OVER SELECTED ROWS
+  int leafrow=srow;
   for( int i=startrow; i<=endrow; i++ ){
-    if( (*tr)[i].children.size()==0 ){
-
+    if( (*tr)[i].children.size()==0 ){    // Only care about leaf nodes
+      leafrow++;
       time ( &rawtime );
       timeinfo = localtime ( &rawtime );
       //      std::cout << "Row " << i << " start at " << asctime (timeinfo);
@@ -135,13 +168,28 @@ int main(int argc, char *argv[])
 
       /////////////////////////////////////////
       // PRINT OUT THE ROW
-      outfile << "\"" << name[i] << "\" ";
-      for( int j=0; j<num_vertices(g); j++ ){
-	if( (*tr)[j].children.size()==0 ){
-	  outfile << d[j]/scale_factor << " ";
+      if( format == 'M' ){
+	// Matrix format, print all the leaves in this row
+	outfile << "\"" << name[i] << "\" ";
+	for( int j=0; j<num_vertices(g); j++ ){
+	  if( (*tr)[j].children.size()==0 ){
+	    outfile << d[j]/scale_factor << " ";
+	  }
+	}
+	outfile << std::endl;
+      } else if( format == 'E' ){
+	// ESPRIT list format, print only index numbers and 
+	int leafcol = 0;
+	for( int j=0; j<num_vertices(g); j++ ){
+          if( (*tr)[j].children.size()==0 ){
+	    leafcol++;
+	    if( j>i && (d[j]/scale_factor)<maxdist ){
+	      outfile << leafrow << " " << leafcol << " " << d[j]/scale_factor << "\n";
+	    }
+	  }
 	}
       }
-      outfile << std::endl;
+
     }
   }
 

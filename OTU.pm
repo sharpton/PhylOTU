@@ -556,6 +556,42 @@ sub run_align_qc{
     return $set_ct;
 }
 
+=head2 run_align_ColQC
+
+ Title   : run_align_ColQC
+ Usage   : $project->run_align_ColQC($mincoverage);
+ Function: Cleans up a fasta formatted multiple sequence alignment by removing 
+           columns with very low coverage
+ Example : $project->run_align_qc(2);
+ Returns : None
+ Args    : Minimum number of residues in a column required for the column to be retained
+
+=cut
+
+sub run_align_ColQC{
+  my ( $self, $min ) = @_;
+  my @domains   = @{ $self->{"domains"} };
+  my $set_ct    = 0;
+  foreach my $set ( @domains) {
+    my $aln      = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc.fa";
+    my $rowaln   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc_rows.fa";
+    my $gap      = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc.gap";
+    my $rowgap   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc_rows.gap";
+    rename( $aln, $rowaln);  # This is no longer the best alignment but we'll save it as a different file name
+    rename( $gap, $rowgap);
+    my @args     = ("-i $rowaln", "-j $rowgap", "-o $aln", "-p $gap", "-flat", "-m $min");
+    my $results  = capture( "perl " . $self->{"workdir"} . "align2profile_qc_Col.pl @args");
+    if( $EXITVAL != 0 ){
+      warn("Error running align2profile_qc_Col.pl for $aln!\n");
+      exit(0);
+    }
+    $set_ct++;
+    warn( "Alignment column qc for $set is complete.\n" );
+  }
+  return $set_ct;
+}
+
+
 =head2 align_to_seqs
 
  Title   : align_to_seqs
@@ -716,16 +752,16 @@ sub tree_to_matrix_R{
 =head2 tree_to_matrix_cpp
 
  Title   : tree_to_matrix_cpp
- Usage   : $project->tree_to_matrix_cpp(start,end);
+ Usage   : $project->tree_to_matrix_cpp(start,end,cutoff);
  Function: Wrapper for tree_to_matrix.cpp, which is released with this package and
            converts a newick tree to a phylip formatted distance matrix. 
            Compilation requires PhyloTree.h and the Boost c++ library. 
            g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
- Example : $project->tree_to_matrix_cpp(0, 100);
+ Example : $project->tree_to_matrix_cpp(0, 100, 0.1);
  Returns : None
  Args    : starting (from 0) and ending rows of the matrix to print to file.
            If start=end=0 the entire matrix is printed
-
+           Print only distances < the cutoff
 =cut
 
 sub tree_to_matrix_cpp{
@@ -733,7 +769,9 @@ sub tree_to_matrix_cpp{
   my $self;
   my $mstart = 0;
   my $mend   = 0;
-  ( $self, $mstart, $mend )  = @_;
+  my $format = 'E';
+  my $cutoff = 0.1;
+  ( $self, $mstart, $mend, $format, $cutoff )  = @_;
   my @domains   = @{ $self->{"domains"} };
   my $set_ct    = 0;
   my $tag = "";
@@ -742,9 +780,18 @@ sub tree_to_matrix_cpp{
   }
   foreach my $set ( @domains) { 
     my $intree    = $self->{"db"}->{"tree"}   . $self->{"sample"}->{"name"} .        "_SSU_" . $set . "_FT_pseudo_pruned.tree";
-    my $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . $tag . "_SSU_" . $set . "_FT_pseudo_pruned.phymat";
+    my ( $outmat, $frqfile );
+    if( $format eq "M" ){
+      # Print for mothur
+      $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . $tag . "_SSU_" . $set . "_FT_pseudo_pruned.phymat";
+      $frqfile   = "";
+    } elsif( $format eq "E" ){
+      # Print for ESPRIT
+      $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . $tag . "_SSU_" . $set . "_FT_pseudo_pruned.ndist";
+      $frqfile   = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"}        . "_SSU_" . $set . "_FT_pseudo_pruned.frq";
+    }
     my @args = ();
-    @args = ( "$intree", "$outmat", "$mstart", "$mend");
+    @args = ( "$intree", "$outmat", "$mstart", "$mend", $format, "$frqfile", "$cutoff");
     print "Running ./tree_to_matrix @args\n";
     my $results = capture( "./tree_to_matrix @args" );
     if( $EXITVAL != 0 ){
@@ -815,6 +862,37 @@ sub run_mothur{
       warn("Error running mothur for $inmat!\n");
       exit(0);
     }  
+  }
+}
+
+=head2 run_Ecluster
+
+ Title   : run_Ecluster
+ Usage   : $project->run_Ecluster();
+ Function: Wrapper for ESPRITs hcluster, which leverages a phylip distance matrix to
+           cluster sequences into OTUs.
+ Example : $project->run_Ecluster( );
+ Returns : None
+ Args    : 
+
+=cut
+
+sub run_Ecluster{
+  #Run Ecluster
+  my ( $self, $cutoff, $method ) = @_;
+  my @domains   = @{ $self->{"domains"} };
+  my $set_ct    = 0;
+  foreach my $set ( @domains) {    
+    my $inlist   = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.ndist";
+    my $frqfile  = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.frq";
+    my $command  = "$inlist $frqfile";
+    print "executing ESPRIT's hcluser using $command\n";
+    my $results  = capture( "hcluster $command" );
+    if( $EXITVAL != 0 ){
+      warn("Error running Ecluster for $inlist!\n");
+      exit(0);
+    }  
+    print $results;
   }
 }
 
@@ -1068,7 +1146,7 @@ sub stitch_alignQC{
     printf GAP $format, @coverage;
     # Print the % coverage
     my $nres = @coverage;
-    for( my $i=0; $i< $nres; $i++ ){
+    for(my $i=0; $i< $nres; $i++ ){
       $coverage[$i] = $coverage[$i]/$numseq;
     }  
     $format = ("%1.5f " x @coverage)."\n";
@@ -1094,21 +1172,29 @@ sub stitch_alignQC{
 sub stitch_matrix{
 
   my ( $self, @ffiles ) = @_;
-  
-  foreach my $set( @{ $self->{"domains"} } ){
-    my $base       = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"};
-    my $suffix     = "_SSU_" . $set . "_FT_pseudo_pruned.phymat";
-    my $Fullmatrix = $base . $suffix;
-    # Delete the output files to be sure we start with a clean slate
-    unlink($Fullmatrix);
-
-    foreach my $command ( @ffiles ){
-      my( $infile, $s, $start, $e, $end ) = split(' ', $command);
-      my $tag     = "_row".$start."to".$end;
-      my $subfile = $base . $tag . $suffix;
-      # cat all the alignment lines together
-      capture( "cat $subfile >> $Fullmatrix" );
-      unlink($subfile);
+  opendir(MATDIR, $self->{"db"}->{"matrix"});
+  my @dircontent = readdir(MATDIR);  
+  closedir(MATDIR);
+  foreach my $format ( ("ndist", "phymat") ){
+    foreach my $set( @{ $self->{"domains"} } ){
+      my $base       = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"};
+      my $suffix     = "_SSU_" . $set . "_FT_pseudo_pruned." . $format;
+      my $Fullmatrix = $base . $suffix;
+      my @files = grep /$suffix$/, @dircontent;
+      print scalar(@files) . " files with suffix $suffix in directory" . $self->{"db"}->{"matrix"} . "\n";
+      if( scalar(@files) > 1 ){
+	# Only cat togheter a list of files (otherwise this is probably the wrong format)
+	# Delete the output files to be sure we start with a clean slate
+	unlink($Fullmatrix);
+	foreach my $command ( @ffiles ){
+	  my( $infile, $s, $start, $e, $end ) = split(' ', $command);
+	  my $tag     = "_row".$start."to".$end;
+	  my $subfile = $base . $tag . $suffix;
+	  # cat all the alignment lines together
+	  capture( "cat $subfile >> $Fullmatrix" );
+	  unlink($subfile);
+	}
+      }
     }
   }
 

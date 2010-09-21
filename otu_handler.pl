@@ -60,12 +60,21 @@ my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level director
 my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
 #my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
 my $seqlencut    = 100;
+my $mincoverage  = 2;
 my $clust_cutoff = 0.05;
 my $clust_method = "average";
 my $tree_method  = "fasttree";
+my $dist_cutoff  = 2*$clust_cutoff;  # used to print shortened tree_to_matrix list for ESPRIT, bigger than the clustering threshold for safety
 my $tree_to_matrix_code = "c";
   # c = c++ code, output formatted for mothur (will implement ESPRIT if needed)
   # R = R script, output formatted for mothur
+my $cluster_code        = "E";
+  # M = mothur, requires matrix format from tree_to_matrix (R or c++)
+  # E = ESPRIT, requires distance list and frequency list (c++ code only)
+if( ($tree_to_matrix_code eq 'R') && ($cluster_code ne 'M') ){
+  print "ERROR: clustering method ESPRIT requires output format not implemented in R, quitting\n";
+  exit;
+}
 #######################################
 # SET UP FLAT FILE DATABASE STRUCTURE #
 #######################################
@@ -120,6 +129,7 @@ if( $numalnQC > 1 ){
   $project->run_align_qc( $seqlencut, $numalnQC );
   if( $numalnQC == -1 ){ exit; } # parallel mode, only run alignQC then quit
 }
+$project->run_align_ColQC( $mincoverage );
 
 #turn these on contingent upon simulation needs
 #$project->build_read2source_tab();
@@ -134,8 +144,7 @@ if( $simtype == 1 ){
   $project->sim_tree_to_matrix();
   $project->sim_format_matrix_to_phylip();
   $project->sim_run_mothur( $clust_cutoff, $clust_method );
-}
-else{
+} else {
   $project->prune_tips();
 
 TREE2MATRIX:
@@ -146,7 +155,7 @@ TREE2MATRIX:
       $project->tree_to_matrix_R();
       $project->format_matrix_to_phylip();
     } elsif( $tree_to_matrix_code =~ 'c' ){
-      $project->tree_to_matrix_cpp($startMat, $endMat);
+      $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff);
     } else {
       print "Unknown tree_to_matrix_code version: $tree_to_matrix_code, quitting\n";
       exit;
@@ -155,7 +164,11 @@ TREE2MATRIX:
   }
 
 CLUSTER:
-  $project->run_mothur( $clust_cutoff, $clust_method );
+  if(      $cluster_code eq 'M' ){
+    $project->run_mothur( $clust_cutoff, $clust_method );
+  } elsif( $cluster_code eq 'E' ){
+    $project->run_Ecluster();
+  }
 }
 
 ##############################################################################
