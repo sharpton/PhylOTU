@@ -562,6 +562,8 @@ sub run_align_qc{
  Usage   : $project->run_align_ColQC($mincoverage);
  Function: Cleans up a fasta formatted multiple sequence alignment by removing 
            columns with very low coverage
+           Code must be compiled as
+           g++ align2profile_qc_Col.cpp -o align2profile_qc_Col
  Example : $project->run_align_qc(2);
  Returns : None
  Args    : Minimum number of residues in a column required for the column to be retained
@@ -579,10 +581,14 @@ sub run_align_ColQC{
     my $rowgap   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc_rows.gap";
     rename( $aln, $rowaln);  # This is no longer the best alignment but we'll save it as a different file name
     rename( $gap, $rowgap);
-    my @args     = ("-i $rowaln", "-j $rowgap", "-o $aln", "-p $gap", "-flat", "-m $min");
-    my $results  = capture( "perl " . $self->{"workdir"} . "align2profile_qc_Col.pl @args");
+    my $args     = "$rowaln $rowgap $aln $gap $min > " . $self->{"db"}->{"qc_align"} . "log.tmp 2>&1";
+    my $EXITVAL  = system($self->{"workdir"} . "align2profile_qc_Col $args");
+#    my $args     = "-i $rowaln -j $rowgap -o $aln -p $gap -flat -m $min > " . $self->{"db"}->{"qc_align"} . "log.tmp 2>&1";
+#print "RUNNING: perl " . $self->{"workdir"} . "align2profile_qc_Col.pl $args\n";
+#    my $EXITVAL  = system("perl " . $self->{"workdir"} . "align2profile_qc_Col.pl $args");
+    system( "cat " . $self->{"db"}->{"qc_align"} . "log.tmp"); #Print stdout and stderr of align2profile_qc_Col.pl to stdout (the logfile)
     if( $EXITVAL != 0 ){
-      warn("Error running align2profile_qc_Col.pl for $aln!\n");
+      warn("Error running align2profile_qc_Col.pl for $aln, exited with code $EXITVAL!\n");
       exit(0);
     }
     $set_ct++;
@@ -771,7 +777,8 @@ sub tree_to_matrix_cpp{
   my $mend   = 0;
   my $format = 'E';
   my $cutoff = 0.1;
-  ( $self, $mstart, $mend, $format, $cutoff )  = @_;
+  my $do_pruning = 1;
+  ( $self, $mstart, $mend, $format, $cutoff, $do_pruning )  = @_;
   my @domains   = @{ $self->{"domains"} };
   my $set_ct    = 0;
   my $tag = "";
@@ -779,7 +786,11 @@ sub tree_to_matrix_cpp{
     $tag = "_row".$mstart."to".$mend;
   }
   foreach my $set ( @domains) { 
-    my $intree    = $self->{"db"}->{"tree"}   . $self->{"sample"}->{"name"} .        "_SSU_" . $set . "_FT_pseudo_pruned.tree";
+    my $intree       = $self->{"db"}->{"tree"}   . $self->{"sample"}->{"name"} .        "_SSU_" . $set . "_FT_pseudo.tree";
+    my $tmptree      = $self->{"db"}->{"tree"}   . $self->{"sample"}->{"name"} .        "_SSU_" . $set . "_FT_pseudo_pruned_tmp.tree";
+    my $prunetree    = $self->{"db"}->{"tree"}   . $self->{"sample"}->{"name"} .        "_SSU_" . $set . "_FT_pseudo_pruned.tree";
+    my $refalign     = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_ref.fa";
+    my $logfile      = $self->{"db"}->{"tree"} . "log" . $tag . ".tmp";
     my ( $outmat, $frqfile );
     if( $format eq "M" ){
       # Print for mothur
@@ -790,10 +801,10 @@ sub tree_to_matrix_cpp{
       $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . $tag . "_SSU_" . $set . "_FT_pseudo_pruned.ndist";
       $frqfile   = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"}        . "_SSU_" . $set . "_FT_pseudo_pruned.frq";
     }
-    my @args = ();
-    @args = ( "$intree", "$outmat", "$mstart", "$mend", $format, "$frqfile", "$cutoff");
-    print "Running ./tree_to_matrix @args\n";
-    my $results = capture( "./tree_to_matrix @args" );
+    my $args = "$intree $tmptree $prunetree $refalign $outmat $mstart $mend $format $do_pruning $frqfile $cutoff > $logfile 2>&1";
+    print "Running ./tree_to_matrix $args\n";
+    my $EXITVAL = system( "./tree_to_matrix $args" );
+    system( "cat $logfile"); #Print stdout and stderr of tree_to_matrix to stdout (the logfile)
     if( $EXITVAL != 0 ){
       warn("Error running tree_to_matrix for $intree!\n");
       exit(0);
@@ -884,15 +895,22 @@ sub run_Ecluster{
   my $set_ct    = 0;
   foreach my $set ( @domains) {    
     my $inlist   = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.ndist";
+    my $sortlist = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.ndist_sort";
     my $frqfile  = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.frq";
-    my $command  = "$inlist $frqfile";
+    my $logfile  = $self->{"db"}->{"matrix"} . "log.tmp";
+    my $command;
+    if( -e $sortlist ){
+      $command   = "-t 150000 -u $sortlist $frqfile > $logfile 2>&1";
+    } else {
+      $command   = "-t 150000      $inlist $frqfile > $logfile 2>&1";
+    }
     print "executing ESPRIT's hcluser using $command\n";
-    my $results  = capture( "hcluster $command" );
+    my $EXITVAL  = system( "./hcluster $command" );
+    system( "cat $logfile" );
     if( $EXITVAL != 0 ){
       warn("Error running Ecluster for $inlist!\n");
       exit(0);
     }  
-    print $results;
   }
 }
 

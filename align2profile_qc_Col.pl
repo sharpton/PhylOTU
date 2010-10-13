@@ -1,10 +1,11 @@
 #!/usr/bin/perl -w
 
+local $| = 1;
+
 use strict;
 use Bio::AlignIO;
 use Getopt::Long;
 use Bio::Align::Utilities qw(:all);
-
 
 #Var initializatoin
 my ($input, $ingap, $output, $outgap, $flat, $aln_format, $min);
@@ -36,6 +37,7 @@ open( INGAP,  "$ingap"    ) || die "can't open input $ingap in align2profile_qc_
 unlink($outgap);
 open( OUTGAP, ">>$outgap" ) || die "can't open output $outgap in align2profile_qc_Col.pl:$!\n";
 my $aln = $in_aln->next_aln();
+if( ! $aln ){ die "can't open input alignment in align2profile_qc_Col.pl:$!\n"; }
 my $num_seq      = <INGAP>;
 my $num_cov_str  = <INGAP>;
 my @num_cov      = split(" ", $num_cov_str);
@@ -59,7 +61,7 @@ for( $i=0; $i<$size; $i++ ){
    push(@remove, $i+1);
  } 
 }
-print $aln->length(), "\n";
+
 print "original alignment: $size  reduced by: ",scalar(@remove), "\n";
 push(@remove, $i+1);  #One beyond the end marks the last 
 
@@ -81,6 +83,7 @@ my $goodstart = 1;
 my $goodend   = 1;
 my $sum =0;
 $i=1;
+print "Begin slicing out bad columns\n";
 while ( scalar(@remove) > 0 ){
   my $badcol = shift(@remove);
   $i++;
@@ -97,7 +100,8 @@ while ( scalar(@remove) > 0 ){
     }
   }  
 }
-
+print "Done removing bad columns\n";
+print "There are " . scalar(@aln_slices) . " slices to cat togheter\n";
 #Print the good rows to file
 my $clean_aln = cat(@aln_slices);
 print "new alignment: ", $clean_aln->length, "\n";
@@ -108,4 +112,5 @@ $clean_aln->map_chars('O','.');
 if( $flat ){
   $clean_aln->set_displayname_flat();
 }
+print "Printing new alignment\n";
 $out_aln->write_aln($clean_aln);

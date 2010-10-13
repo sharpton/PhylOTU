@@ -43,6 +43,7 @@ if( $numTreeMat > 0 && ( $startMat!=0 || $endMat!=0 )){
 if( $is_sim ){
     print "You are running handler for simulations!\n";    
 }
+my $do_pruning = $numTreeMat;
 print "Processing $samp_path\n";
 ########################
 # USER RUNTIME OPTIONS #
@@ -61,7 +62,7 @@ my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is s
 #my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
 my $seqlencut    = 100;
 my $mincoverage  = 2;
-my $clust_cutoff = 0.05;
+my $clust_cutoff = 0.15;
 my $clust_method = "average";
 my $tree_method  = "fasttree";
 my $dist_cutoff  = 2*$clust_cutoff;  # used to print shortened tree_to_matrix list for ESPRIT, bigger than the clustering threshold for safety
@@ -97,10 +98,11 @@ $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
 #######################################
 # Jump to the appropriate step
 #######################################
-if( $numalnQC   == -1  ){ print "Skipping to alignment\n";      goto ALIGNQC; }
+if( $numalnQC   == -1  ){ print "Skipping to alignmentQC\n";    goto ALIGNQC; }
 if( $numTreeMat == -1  ){ print "Skipping to tree_to_matrix\n"; goto TREE2MATRIX; }
 if( $skipto     eq "A" ){ print "Skipping to alignment\n";      goto ALIGN; }
 if( $skipto     eq "Q" ){ print "Skipping to alignentQC\n";     goto ALIGNQC; }
+if( $skipto     eq "L" ){ print "Skipping to alignentQC col\n"; goto ALIGNQCCOL; }
 if( $skipto     eq "T" ){ print "Skipping to tree creation\n";  goto TREE; }
 if( $skipto     eq "M" ){ print "Skipping to tree_to_matrix\n"; goto TREE2MATRIX; }
 if( $skipto     eq "C" ){ print "Skipping to clustering\n";     goto CLUSTER; }
@@ -129,6 +131,7 @@ if( $numalnQC > 1 ){
   $project->run_align_qc( $seqlencut, $numalnQC );
   if( $numalnQC == -1 ){ exit; } # parallel mode, only run alignQC then quit
 }
+ALIGNQCCOL:
 $project->run_align_ColQC( $mincoverage );
 
 #turn these on contingent upon simulation needs
@@ -145,17 +148,22 @@ if( $simtype == 1 ){
   $project->sim_format_matrix_to_phylip();
   $project->sim_run_mothur( $clust_cutoff, $clust_method );
 } else {
-  $project->prune_tips();
+
+  if( $tree_to_matrix_code =~ 'R'){
+    $project->prune_tips();
+    # Pruning in cpp version is done in tree_to_matrix, via the flag do_pruning>0
+  }
 
 TREE2MATRIX:
   if( $numTreeMat > 1 ){
+    $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning);
     parallel("tree_to_matrix");
   } else {
     if(      $tree_to_matrix_code =~ 'R' ){
       $project->tree_to_matrix_R();
       $project->format_matrix_to_phylip();
     } elsif( $tree_to_matrix_code =~ 'c' ){
-      $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff);
+      $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning);
     } else {
       print "Unknown tree_to_matrix_code version: $tree_to_matrix_code, quitting\n";
       exit;
@@ -216,11 +224,14 @@ sub parallel
 	  # The node crashed, resubmit this job
 	  print "Rerunning file ".$i." as it seems the node failed\n";
 	  $qID[$i] = submit($i.$option);
-	} elsif (`grep -i error $outfile`){
+	} elsif (`grep -i kill $outfile`){
 	  # code crashed, quit (or I could change this to retry....)
 	  print $type." crashed or something else went wrong with file ".$i.", I quit\n";
 	  exit(0);
 	} else {
+	  if (`grep -i error $outfile`){
+	    print $type." crashed or something else went wrong with file ".$i.", but I will continue\n";
+	  }
 	  # Everything ran fine, remove this job from the list
 	  print "Job ".$qID[$i]." on subsample ".$i." finished sucessfully\n";
 	  $qID[$i] = 0;
@@ -250,7 +261,7 @@ sub submit
   my $subsample = shift;
   
   # the run_otu_handler_parallel.sh script must be configured properly for your batch system
-  my $command = "./run_otu_handler.sh -i ".$subsample;
+  my $command = "./run_otu_handler_small.sh -i ".$subsample;
   my $result = capture( "qsub $command" );
   print( "qsub $command" );
   # Should return a string like 
