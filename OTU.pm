@@ -1737,7 +1737,7 @@ sub sim_tree_to_matrix{
   foreach my $set ( @domains) { 
     my $intree    = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.tree";
     my $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.Rmat";
-    my $refintree = 
+    my $refintree =  $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_REF_pruned.tree";
     my $refoutmat = $self->{"db"}->{"matrix"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_REF_pruned.Rmat";      
 #    my $refnames  = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_refnames.list";    
     my @args = ();
