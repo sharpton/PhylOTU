@@ -143,12 +143,12 @@ int main(int argc, char *argv[])
       // phylip format
       outfile << tr->getNleaves() << std::endl;
       //R format (not used)
-      for( std::list<TreeNode>::iterator it=tr->begin(); it!=tr->end(); it++ ){
-	if( it->children.size()==0 ){
-	  outfile << "\"" << it->name.c_str() << "\" ";
-	}
-      }
-      outfile << std::endl;
+      //      for( std::list<TreeNode>::iterator it=tr->begin(); it!=tr->end(); it++ ){
+      //	if( it->children.size()==0 ){
+      //	  outfile << "\"" << it->name.c_str() << "\" ";
+      //	}
+      //      }
+      //outfile << std::endl;
     } else if( format == 'E' ){
       // Print out frequency file, which also provide a map from ID name to index #
       std::ofstream frqfile;
