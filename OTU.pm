@@ -768,6 +768,7 @@ sub tree_to_matrix_R{
  Args    : starting (from 0) and ending rows of the matrix to print to file.
            If start=end=0 the entire matrix is printed
            Print only distances < the cutoff
+
 =cut
 
 sub tree_to_matrix_cpp{
@@ -1728,6 +1729,110 @@ sub sim_prune_tips{
     return $self;
 }
 
+#This version interfaces with the c++ version of the tree pruning algorithm to prune a tree and produce a 
+#distance matrix (phylip). See tree_to_matrix_cpp for more information on the specifics.
+#
+#Here we're going to cut our tree down to versions with fewer tips. the breakdown follows:
+#Sim 1 treetype 1 (s1t1): Don't prune any tips on either source or sim tree
+#     - this is simply the input files for sim and ref trees
+#s1t2: Prune tree and reference tree down to just source/sim tips
+#s2t1: Prune tree down to just source and sim tips. Ref tree of just source tips
+
+sub sim_tree_to_matrix_cpp{
+    #initialized params from tree_to_matrix_cpp
+    my $mstart = 0;
+    my $mend   = 0;
+    my $format = 'M';
+    my $cutoff = 0.1;
+    my $do_pruning = 1;
+    my $tag = "";
+    #grab run-time params from method call
+    my ( $self, $simtype, $reftree );
+    ( $self, $simtype, $reftree, $mstart, $mend, $format, $cutoff, $do_pruning )  = @_;
+    my $tab        = $self->{"db"}->{"reads"} . "sim-read2source-lookup.tab";
+    my @domains    = @{ $self->{"domains"} };
+    my $set_ct     = 0;
+    if( $mend != 0 ){
+      $tag = "_row".$mstart."to".$mend;
+    }
+    #this may be obsolete given the revamp to the sim workflow
+    my @source_to_save = ();
+    open( TAB, "$tab" ) || 
+      die "can't open sim-read2source-lookup.tab $tab:$!\n";
+    while(<TAB>){
+      chomp $_;
+      my ( $read, $source ) = split( "\t", $_ );
+      push @source_to_save, $source;
+    }
+    close TAB;
+    #let's process a domain's data
+    foreach my $set( @domains ){
+	my $intree      = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo.tree";
+	my $refalign    = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_ref.fa";
+	my $source_list = $self->{"db"}->{"qc_align"} . $self->{"sample"}->{"name"} . 
+	  "_SSU_" . $set . "_source_list.txt";        
+	my $subref_align = $self->{"db"}->{"qc_align"} . $self->{"sample"}->{"name"} . 
+	  "_SSU_" . $set . "subref_align.fa";        
+	#simulation tree file settings
+	my $tmptree     = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . 
+	  "_SSU_" . $set . "_FT_pseudo_pruned_tmp.tree";
+	my $prunetree   = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . 
+	  "_SSU_" . $set . "_FT_pseudo_pruned.tree";
+	my $outmat      = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . 
+	  $tag . "_SSU_" . $set . "_FT_pseudo_pruned.phymat";
+	#source (formerly called reference) file settings. Not to be confused with the reference db sequences!
+	my $rtmptree    = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . 
+	  "_SSU_" . $set . "_FT_pseudo_REF_pruned_tmp.tree";
+	my $rprunetree  = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . 
+	  "_SSU_" . $set . "_FT_pseudo_REF_pruned.tree";
+	my $routmat      = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . 
+	  $tag . "_SSU_" . $set . "_FT_pseudo_REF_pruned.phymat";
+	my $logfile     = $self->{"db"}->{"tree"} . "log" . $tag . ".tmp";
+	my $rlogfile     = $self->{"db"}->{"tree"} . "REF_log" . $tag . ".tmp";
+	#Come back and add ESPRIT format functionality at a later date, Skip for now
+	my $frqfile = "";
+        #build a reference table that indicates which ids refer to source/sims
+	my %sourceids = ();
+	open( SOURCE_LIST, $source_list ) || 
+	  die "can't open source list $source_list in sim_prune_tips: $!\n";
+	while(<SOURCE_LIST>){
+	  chomp $_;
+	  $sourceids{$_} = 1;
+	}
+	#Going to open the reference alignnment and print out those sequences that are not sources 
+	#into a sub-reference alignment. This is important given the way the the tree_to_matrix_cpp
+	#method prunes tips: sequences in this subref align will be pruned from both trees.
+	my $refseqin  = Bio::SeqIO->new( -file => $refalign, -format => 'fasta' );
+	my $subrefout = Bio::SeqIO->new( -file => ">$subref_align", -format => 'fasta' );
+	while( my $refseq = $refseqin->next_seq() ){
+	  my $id = $refseq->display_id();
+	  $id =~ s/\/.*$//g;
+	  next if ( $sourceids{$id} );
+	  $subrefout->write_seq( $refseq );
+	}
+	#get sim and ref trees and start processing them using tree_to_matrix
+	#start with the sim tree
+	my $args = "$intree $tmptree $prunetree $subref_align $outmat $mstart $mend $format $do_pruning $frqfile $cutoff > $logfile 2>&1";
+	print "Running ./tree_to_matrix $args\n";
+	my $EXITVAL = system( "./tree_to_matrix $args" );
+	system( "cat $logfile"); #Print stdout and stderr of tree_to_matrix to stdout (the logfile)                 
+	if( $EXITVAL != 0 ){
+	  warn("Error running tree_to_matrix for $intree!\n");
+	  exit(0);
+	}
+	#now do the source tree
+	my $rargs = "$reftree $rtmptree $rprunetree $subref_align $routmat $mstart $mend $format $do_pruning $frqfile $cutoff > $logfile 2>&1";
+	print "Running ./tree_to_matrix $args\n";
+	$EXITVAL = system( "./tree_to_matrix $rargs" );
+	system( "cat $rlogfile"); #Print stdout and stderr of tree_to_matrix to stdout (the logfile)                 
+	if( $EXITVAL != 0 ){
+	  warn("Error running tree_to_matrix for $reftree!\n");
+	  exit(0);
+	}		
+    }
+    return $self;
+}
+
 
 sub sim_tree_to_matrix{
   #Call an R script with the following:
@@ -1737,7 +1842,7 @@ sub sim_tree_to_matrix{
   foreach my $set ( @domains) { 
     my $intree    = $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.tree";
     my $outmat    = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.Rmat";
-    my $refintree = 
+    my $refintree =  $self->{"db"}->{"tree"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_REF_pruned.tree";
     my $refoutmat = $self->{"db"}->{"matrix"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_REF_pruned.Rmat";      
 #    my $refnames  = $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_refnames.list";    
     my @args = ();

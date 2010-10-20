@@ -7,7 +7,8 @@ use Getopt::Long;
 use IPC::System::Simple qw(capture $EXITVAL);
 
 my ( $samp_path, $sim_read2source_tab );
-my $reference_tree = "SSU_BAC_ref_unaln_SSU_BAC_FT_pseudo_pruned_fmt.tree";
+#This is an optional simulation specific variable; not necessary for analysis of metagenomic libraries
+my $reference_tree = "/netapp/home/sharpton/projects/OTU/db/reference/trees/SSU_BAC_ref_unaln_SSU_BAC_FT_pseudo_pruned_fmt.tree";
 my $is_sim     = 0;
 my $numblast   = 1;
   # -1 = run only blast (for parallel jobs)
@@ -58,10 +59,10 @@ my $trim      = 2; #Should the reads be trimmed to just the 16S sequence via bla
                    #0 = no trimming, use complete read
                    #1 = trim to the top HSP coordinates
                    #2 = tile HSPs from top hit, use the best tile, and trim to this tile's coordinates
-my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
-#my $masterdir    = "/Users/sharpton/projects/OTU/db/"; #upper level directory
-my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
-#my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
+#my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
+my $masterdir    = "/netapp/home/sharpton/projects/OTU/db/"; #upper level directory
+#my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
+my $scripts_path = "/netapp/home/sharpton/projects/OTU/PhylOTU/"; #where the code is stored
 my $seqlencut    = 100;
 my $mincoverage  = 2;
 #my $clust_cutoff = 0.15;#moved above!
@@ -71,7 +72,7 @@ my $dist_cutoff  = 2*$clust_cutoff;  # used to print shortened tree_to_matrix li
 my $tree_to_matrix_code = "c";
   # c = c++ code, output formatted for mothur (will implement ESPRIT if needed)
   # R = R script, output formatted for mothur
-my $cluster_code        = "E";
+my $cluster_code        = "M";
   # M = mothur, requires matrix format from tree_to_matrix (R or c++)
   # E = ESPRIT, requires distance list and frequency list (c++ code only)
 if( ($tree_to_matrix_code eq 'R') && ($cluster_code ne 'M') ){
@@ -84,7 +85,7 @@ if( ($tree_to_matrix_code eq 'R') && ($cluster_code ne 'M') ){
 #Note: sim 1 (prune sim) is testing how read tree compares to source/ref tree
 #sim 2 (readsource sim) is testing how reads and sources co cluster on same tree
 #sim 3 is prune sim with padded ends; ultrashort and 2 reads/source
-my $simtype = 3;
+my $simtype = 1;
 my $project = OTU->new();
 if( $is_sim ){
     $project->set_simulation();
@@ -144,10 +145,12 @@ TREE:
 $project->run_tree(); 
 #$project->align_to_seqs();
 
-if( $simtype == 1 ){
-  $project->sim_prune_tips( $simtype, $reference_tree ); #for sim 2 and now also sim 1
-  $project->sim_tree_to_matrix();
-  $project->sim_format_matrix_to_phylip();
+TREE2MATRIX:
+if( $is_sim && $simtype == 1 ){
+#  $project->sim_prune_tips( $simtype, $reference_tree ); #for sim 2 and now also sim 1
+#  $project->sim_tree_to_matrix();
+#  $project->sim_format_matrix_to_phylip();
+  $project->sim_tree_to_matrix_cpp( $simtype, $reference_tree, $startMat, $endMat, $cluster_code, $clust_cutoff, $do_pruning );
   $project->sim_run_mothur( $clust_cutoff, $clust_method );
 } else {
 
@@ -156,7 +159,6 @@ if( $simtype == 1 ){
     # Pruning in cpp version is done in tree_to_matrix, via the flag do_pruning>0
   }
 
-TREE2MATRIX:
   if( $numTreeMat > 1 ){
     $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning);
     parallel("tree_to_matrix");
