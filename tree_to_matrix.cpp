@@ -237,7 +237,6 @@ int main(int argc, char *argv[])
   int i=startrow;
   for( std::list<TreeNode>::iterator it=startit; it!=endit; it++ ){
     if( it->children.size()==0 ){    // Only care about leaf nodes
-      leafrow++;
       time ( &rawtime );
       timeinfo = localtime ( &rawtime );
       //      std::cout << "Row " << i << " start at " << asctime (timeinfo);
@@ -258,26 +257,27 @@ int main(int argc, char *argv[])
       /////////////////////////////////////////
       // PRINT OUT THE ROW
       if( format == 'M' ){ outfile << "\"" << name[i] << "\" "; }
-	int leafcol = 0;
-	int j=0;
-	for( std::list<TreeNode>::iterator jt=tr->begin(); jt!=tr->end(); jt++ ){
-	  if( jt->children.size()==0 ){
-	    leafcol++;
-	    if( format == 'M' ){
-	      // Matrix format, print all the leaves in this row
-	      outfile << d[j]/scale_factor << " ";
-	    } else if( format == 'E' ){
-	      // ESPRIT list format, print only index numbers and 
-	      if( j>i && (d[j]/scale_factor)<maxdist ){
-		outfile << leafrow << " " << leafcol << " " << d[j]/scale_factor << "\n";
+      int leafcol = 0;
+      int j=0;
+      for( std::list<TreeNode>::iterator jt=tr->begin(); jt!=tr->end(); jt++ ){
+	if( jt->children.size()==0 ){
+	  if( format == 'M' ){
+	    // Matrix format, print all the leaves in this row
+	    outfile << d[j]/scale_factor << " ";
+	  } else if( format == 'E' ){
+	    // ESPRIT list format, print only index numbers and 
+	    if( j>i && (d[j]/scale_factor)<maxdist ){
+	      outfile << leafrow << " " << leafcol << " " << d[j]/scale_factor << "\n";
 	      }
-	    }
 	  }
-	  j++;
+	  leafcol++;
 	}
-	if( format == 'M' ){
-	  outfile << std::endl;
-	}
+	j++;
+      }
+      if( format == 'M' ){
+	outfile << std::endl;
+      }
+      leafrow++;
     }
     i++;
   }

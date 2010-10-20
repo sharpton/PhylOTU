@@ -24,6 +24,7 @@ my $numTreeMat = 1;
 my $startMat   = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
 my $endMat     = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
 my $skipto     = ""; # skip to (A)lignment, alignment(Q)c, (T)ree, tree2(M)atrix, (C)lustering 
+my $clust_cutoff = 0.15;
 GetOptions(
     'i=s' => \$samp_path,
     'sim' => \$is_sim,
@@ -34,6 +35,7 @@ GetOptions(
     's=i' => \$startMat,
     'e=i' => \$endMat,
     'k=s' => \$skipto,
+    'cc:f'=> \$clust_cutoff,
     );
 if( $numTreeMat > 0 && ( $startMat!=0 || $endMat!=0 )){
   print "tree_to_matrix not running in parallel mode, start and end step to full matrix printing\n";
@@ -62,7 +64,7 @@ my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is s
 #my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU"; #where the code is stored
 my $seqlencut    = 100;
 my $mincoverage  = 2;
-my $clust_cutoff = 0.15;
+#my $clust_cutoff = 0.15;#moved above!
 my $clust_method = "average";
 my $tree_method  = "fasttree";
 my $dist_cutoff  = 2*$clust_cutoff;  # used to print shortened tree_to_matrix list for ESPRIT, bigger than the clustering threshold for safety

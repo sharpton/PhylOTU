@@ -900,9 +900,9 @@ sub run_Ecluster{
     my $logfile  = $self->{"db"}->{"matrix"} . "log.tmp";
     my $command;
     if( -e $sortlist ){
-      $command   = "-t 150000 -u $sortlist $frqfile > $logfile 2>&1";
+      $command   = "-t 100000 -u         $sortlist $frqfile > $logfile 2>&1";
     } else {
-      $command   = "-t 150000      $inlist $frqfile > $logfile 2>&1";
+      $command   = "-t 100000 -b 100000000 $inlist $frqfile > $logfile 2>&1";
     }
     print "executing ESPRIT's hcluser using $command\n";
     my $EXITVAL  = system( "./hcluster $command" );
