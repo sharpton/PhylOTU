@@ -779,8 +779,14 @@ sub tree_to_matrix_cpp{
   my $format = 'E';
   my $cutoff = 0.1;
   my $do_pruning = 1;
-  ( $self, $mstart, $mend, $format, $cutoff, $do_pruning )  = @_;
-  my @domains   = @{ $self->{"domains"} };
+  my $dom = "";
+  ( $self, $mstart, $mend, $format, $cutoff, $do_pruning, $dom )  = @_;
+  my @domains;
+  if( $dom ){
+    @domains = ( $dom );
+  } else {
+    @domains = @{ $self->{"domains"} };
+  }
   my $set_ct    = 0;
   my $tag = "";
   if( $mend != 0 ){
@@ -900,11 +906,11 @@ sub run_Ecluster{
     my $frqfile  = $self->{"db"}->{"matrix"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_FT_pseudo_pruned.frq";
     my $logfile  = $self->{"db"}->{"matrix"} . "log.tmp";
     my $command;
-    if( -e $sortlist ){
-      $command   = "-t 100000 -u         $sortlist $frqfile > $logfile 2>&1";
-    } else {
+#    if( -e $sortlist ){
+#      $command   = "-t 100000 -u         $sortlist $frqfile > $logfile 2>&1";
+#    } else {
       $command   = "-t 100000 -b 100000000 $inlist $frqfile > $logfile 2>&1";
-    }
+#    }
     print "executing ESPRIT's hcluser using $command\n";
     my $EXITVAL  = system( "./hcluster $command" );
     system( "cat $logfile" );
@@ -940,8 +946,13 @@ sub split_query{
     my @domains   = @{ $self->{"domains"} };
     my @subfilenames;   # file names returned, used to submit new jobs
     my ( $name, $path, $suffix ) = fileparse( $self->{"sample"}->{"path"}, qr/\.[^.]*/ );
+    my @list = @domains;
+    if( $type =~ "blast"){
+      # Since I don't use $set for the blast stuff I only want to run everything once
+      @list = $list[1];
+    }
 
-    foreach my $set ( @domains) {
+    foreach my $set ( @list ) {
       $path =~ s/raw\///g;
       my $oldraw    = $path    . "raw/"          .$name    . ".fa";
       my $oldscore  = $path    . "aligns/scores/" . $name    . "_SSU_" . $set . "_cmscores.tab";
@@ -991,8 +1002,10 @@ sub split_query{
 	      $outfile = $alnfile;
 	    }
 	    open( SUBFILE, ">".$outfile) || die "Can't open new sub-sample file: $!\n";
-	    push(@subfilenames, $rawfile);  # Return the raw file names, this is needed to submit
-
+	    if( $set eq $domains[-1] ){
+	      # Only save the files to submit on one version of $set, the parallel code will run BAC and ARC
+	      push(@subfilenames, $rawfile);  # Return the raw file names, this is needed to submit
+	    }
 	    # Reset the line count, increment the file number
 	    $lcount = 0;
 	    $fcount++;
@@ -1035,13 +1048,13 @@ sub split_tree{
     my $end     = $step;
     print "splitting ".$infile." tree_to_matrix printing into ".$num." jobs with ".$step." rows each\n";
     while( $start < $nleaves ){
-      my $command = $infile . " -s $start -e $end";
+      my $command = $infile . " -s $start -e $end -d $set";
       push(@subfilenames, $command);
       $start = $end   + 1;
       $end   = $start + $step;
     }
-    return @subfilenames;
   }
+  return @subfilenames;
 
 }
 
@@ -1093,7 +1106,10 @@ sub stitch_blast{
       # Cleanup
       unlink($ffile);                  # Delete the subsample fasta file in the original directory
       unlink($bfile);                  # Delete the blastout file
-      capture( "rm -rf $subsampdir");  # Delete the new sample directory that was made (this includes $sfile)     
+      my @domains = @{ $self->{"domains"} };
+      if( $set eq $domains[-1] ){
+	capture( "rm -rf $subsampdir");  # Delete the new sample directory that was made (this includes $sfile)     
+      }
     }
   }
 }
@@ -1152,10 +1168,12 @@ sub stitch_alignQC{
 	@coverage = @cov;
       }
       close GAP;
-      
-      # Delete the new sample directory that was made
-      capture( "rm -rf $subsampdir");  
-      
+
+      my @domains = @{ $self->{"domains"} };
+      if( $set eq $domains[-1] ){
+	# Delete the new sample directory that was made
+	capture( "rm -rf $subsampdir");  
+      }
     }
     open( GAP, ">>$FullalignQCgap" ) || die "can't open output $FullalignQCgap in stitch_alignQC:$!\n";
     # Print the total number of sequences
@@ -1206,12 +1224,14 @@ sub stitch_matrix{
 	# Delete the output files to be sure we start with a clean slate
 	unlink($Fullmatrix);
 	foreach my $command ( @ffiles ){
-	  my( $infile, $s, $start, $e, $end ) = split(' ', $command);
-	  my $tag     = "_row".$start."to".$end;
-	  my $subfile = $base . $tag . $suffix;
-	  # cat all the alignment lines together
-	  capture( "cat $subfile >> $Fullmatrix" );
-	  unlink($subfile);
+	  my( $infile, $s, $start, $e, $end, $d, $dom ) = split(' ', $command);
+	  if( $dom =~ $set ){
+	    my $tag     = "_row".$start."to".$end;
+	    my $subfile = $base . $tag . $suffix;
+	    # cat all the alignment lines together
+	    capture( "cat $subfile >> $Fullmatrix" );
+	    unlink($subfile);
+	  }
 	}
       }
     }

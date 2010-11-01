@@ -75,6 +75,7 @@ int main(int argc, char *argv[])
   PhyloTree<TreeNode>* tr = new PhyloTree<TreeNode>();
   std::ifstream infile;
   infile.open(inname);
+  if( !infile.is_open() ){ std::cout << "Unable to open file " << inname << std::endl; }
   tr->readTree(infile);
 
   /////////////////////////////////////////
@@ -84,6 +85,7 @@ int main(int argc, char *argv[])
     // Read in reference alignment file and grab reference file names
     std::ifstream reffile;
     reffile.open(refalignname);
+    if( !reffile.is_open() ){ std::cout << "Unable to open file " << refalignname << std::endl; }
     char line[100];
     reffile >> line;
     while( !reffile.eof() ){
@@ -92,6 +94,10 @@ int main(int argc, char *argv[])
 	std::string name(line);
 	int slash = (int)name.find("/");
 	name = name.substr(1, slash-1);
+	int bar = (int)name.find("|");
+	if ( bar != name.npos ){
+	  name = name.replace(bar, 1, "_");
+	}
 	// Remove this leaf from the tree
 	tr->deleteLeaf(name.c_str());
       }
@@ -102,6 +108,7 @@ int main(int argc, char *argv[])
     // Print to tmp file, just in case 
     std::ofstream treeout;
     treeout.open( tempfilename );
+    if( !treeout.is_open() ){ std::cout << "Unable to open file " << tempfilename << std::endl; }
     treeout.precision(5);
     treeout.setf(std::ios::fixed,std::ios::floatfield);
     tr->writeTree( treeout );
@@ -117,9 +124,9 @@ int main(int argc, char *argv[])
 
     // Print pruned file, for use by parallel jobs
     treeout.open( prunedfilename );
+    if( !treeout.is_open() ){ std::cout << "Unable to open file " << prunedfilename << std::endl; }
     treeout.precision(6);
     treeout.setf(std::ios::fixed,std::ios::floatfield);
-    if( !treeout.is_open() ){ std::cout << "Unable to open file " << prunedfilename << std::endl; }
     tr->writeTree( treeout );
     treeout.close();
     std::cout << "Printed to file " << prunedfilename << std::endl;
@@ -135,6 +142,7 @@ int main(int argc, char *argv[])
   // PRINT OUT THE HEADER (only before top row)
   std::ofstream outfile;
   outfile.open(outfilename);
+  if( !outfile.is_open() ){ std::cout << "Unable to open file " << outfilename << std::endl; }
   outfile.precision(5);
   outfile.setf(std::ios::fixed,std::ios::floatfield);
 
@@ -153,6 +161,7 @@ int main(int argc, char *argv[])
       // Print out frequency file, which also provide a map from ID name to index #
       std::ofstream frqfile;
       frqfile.open(frqfilename);
+      if( !frqfile.is_open() ){ std::cout << "Unable to open file " << frqfilename << std::endl; }
       for( std::list<TreeNode>::iterator it=tr->begin(); it!=tr->end(); it++ ){
 	if( it->children.size()==0 ){
 	  frqfile << it->name.c_str() << " 1" << std::endl;
@@ -229,7 +238,6 @@ int main(int argc, char *argv[])
 #endif
   std::vector<vertex_descriptor> p(num_vertices(g));
   std::vector<int> d(num_vertices(g));
-
   
   /////////////////////////////////////////
   // LOOP OVER SELECTED ROWS
@@ -281,7 +289,6 @@ int main(int argc, char *argv[])
     }
     i++;
   }
-
   time ( &rawtime );
   timeinfo = localtime ( &rawtime );
   //  std::cout << "Done at " << asctime (timeinfo);

@@ -24,6 +24,7 @@ my $numTreeMat = 1;
   # >1 = number of parallel tree_to_matrix jobs to run
 my $startMat   = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
 my $endMat     = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
+my $T2M_domain = ""; # Only needs to be specified when parallel tree_to_matrix jobs are running
 my $skipto     = ""; # skip to (A)lignment, alignment(Q)c, (T)ree, tree2(M)atrix, (C)lustering 
 my $clust_cutoff = 0.15;
 GetOptions(
@@ -35,6 +36,7 @@ GetOptions(
     'm=i' => \$numTreeMat,
     's=i' => \$startMat,
     'e=i' => \$endMat,
+    'd=s' => \$T2M_domain,
     'k=s' => \$skipto,
     'cc:f'=> \$clust_cutoff,
     );
@@ -52,17 +54,17 @@ print "Processing $samp_path\n";
 # USER RUNTIME OPTIONS #
 ########################
 
-#my @domains   = qw(BAC ARC);
-my @domains   = qw( BAC );
+my @domains   = qw(BAC ARC);
+#my @domains   = qw( BAC );
 my $ecutoff   = 0.000001;
 my $trim      = 2; #Should the reads be trimmed to just the 16S sequence via blast analysis?
                    #0 = no trimming, use complete read
                    #1 = trim to the top HSP coordinates
                    #2 = tile HSPs from top hit, use the best tile, and trim to this tile's coordinates
-#my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
-my $masterdir    = "/netapp/home/sharpton/projects/OTU/db/"; #upper level directory
-#my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
-my $scripts_path = "/netapp/home/sharpton/projects/OTU/PhylOTU/"; #where the code is stored
+my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
+#my $masterdir    = "/netapp/home/sharpton/projects/OTU/db/"; #upper level directory
+my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
+#my $scripts_path = "/netapp/home/sharpton/projects/OTU/PhylOTU/"; #where the code is stored
 my $seqlencut    = 100;
 my $mincoverage  = 2;
 #my $clust_cutoff = 0.15;#moved above!
@@ -72,7 +74,7 @@ my $dist_cutoff  = 2*$clust_cutoff;  # used to print shortened tree_to_matrix li
 my $tree_to_matrix_code = "c";
   # c = c++ code, output formatted for mothur (will implement ESPRIT if needed)
   # R = R script, output formatted for mothur
-my $cluster_code        = "M";
+my $cluster_code        = "E";
   # M = mothur, requires matrix format from tree_to_matrix (R or c++)
   # E = ESPRIT, requires distance list and frequency list (c++ code only)
 if( ($tree_to_matrix_code eq 'R') && ($cluster_code ne 'M') ){
@@ -96,7 +98,7 @@ $project->set_domains( \@domains );
 $project->set_tree_method( $tree_method );
 $project->build_db( $masterdir );
 $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
-#$project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
+$project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
 
 #######################################
 # Jump to the appropriate step
@@ -160,14 +162,14 @@ if( $is_sim && $simtype == 1 ){
   }
 
   if( $numTreeMat > 1 ){
-    $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning);
+    $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning, $T2M_domain);
     parallel("tree_to_matrix");
   } else {
     if(      $tree_to_matrix_code =~ 'R' ){
       $project->tree_to_matrix_R();
       $project->format_matrix_to_phylip();
     } elsif( $tree_to_matrix_code =~ 'c' ){
-      $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning);
+      $project->tree_to_matrix_cpp($startMat, $endMat, $cluster_code, $dist_cutoff, $do_pruning, $T2M_domain);
     } else {
       print "Unknown tree_to_matrix_code version: $tree_to_matrix_code, quitting\n";
       exit;
@@ -203,7 +205,7 @@ sub parallel
     @subsample_files = $project->split_query($type, $numalnQC);
     $option = " -a -1";
   } elsif($type =~ "tree_to_matrix") {
-    # The subsample_files text here already include the options -s START -e END
+    # The subsample_files text here already include the options -s START -e END -d DOMAIN
     @subsample_files = $project->split_tree($numTreeMat);
     $option = " -m -1";
   }
