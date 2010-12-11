@@ -26,22 +26,22 @@ int main(int argc, char *argv[])
     std::cout << "Wrong number of input arguments (" << argc << "), should have format:\n";
     std::cout << "\ttree_to_matrix <infile> <tmpfile> <prunedfile> <refalignment> <outfile> <starting_row> <ending_row> <format M=matrix E=esprit> <Do_Pruning 0=no 1=yes 2=only prune> [outfile_freq] [maxdistance(E format only)]\n";
   }
-  char* infilename     = argv[1];
-  char* tempfilename   = argv[2];
-  char* prunedfilename = argv[3];
-  char* refalignname   = argv[4];
-  char* outfilename    = argv[5];
-  int startrow    = atoi(argv[6]);
-  int endrow      = atoi(argv[7]);
-  char format          = argv[8][0];
-  int do_pruning  = atoi(argv[9]);
+  char* infilename     = argv[1];    // (input)  Tree file with reference sequences
+  char* tempfilename   = argv[2];    // (output) Half-pruned file (after pruning, before cleaning up single-child nodes and internal nodes which have become leaves
+  char* prunedfilename = argv[3];    // (in/out) Pruned file name, input if not pruning, output if pruning
+  char* refalignname   = argv[4];    // (input)  reference fasta file, only uses the sequence identifiers for pruning
+  char* outfilename    = argv[5];    // (output) Output distance matrix/list file name
+  int startrow    = atoi(argv[6]);   // (input)  First row to print for the distance matrix (0 for all)
+  int endrow      = atoi(argv[7]);   // (input)  Last  row to print for the distance matrix (0 for all)
+  char format          = argv[8][0]; // (input)  Format of distance, M=matrix, E=ESPRIT list
+  int do_pruning  = atoi(argv[9]);   // (input)  0=no 1=yes 2=only prune
   //    M = matrix format, used by mothur
   //    E = ESPRIT list format
   char* frqfilename;
   float maxdist=0.1;
   if( argc == 12 ){
-    frqfilename      = argv[10];
-    maxdist     = atof(argv[11]);
+    frqfilename      = argv[10];     // (Optional output) Frequency file name, used when running ESPRIT
+    maxdist     = atof(argv[11]);    // (Optional input)  Maximum distance to print in the distance list (ESPRIT format only)
     std::cout << frqfilename << " " << maxdist << std::endl;
   } else {
     if( format == 'E' ){
