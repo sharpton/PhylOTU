@@ -121,6 +121,8 @@ int main(int argc, char *argv[])
     // Smooth to remove single child nodes
     while( tr->smooth() > 0 );
 
+    // Check that the root doesn't have only one node
+    tr->check_root();
 
     // Print pruned file, for use by parallel jobs
     treeout.open( prunedfilename );
@@ -194,7 +196,7 @@ int main(int argc, char *argv[])
     std::cout << "Endrow is " << endrow << std::endl; 
   }
   double scale_factor = 1;
-  if( maxdist < 1 ){
+  if( maxdist < 1.01 ){
     scale_factor = 1000000;
   }
   size_t eI = 0;

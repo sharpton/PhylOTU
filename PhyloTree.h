@@ -72,6 +72,10 @@ class PhyloTree
   /**
    * Removed nodes with only one child and add distance to the child
    */
+  int check_root();
+  /**
+   * Check that the root has two children, if not, change the root
+   */
   //	T& operator[]( const unsigned i ){ return nodes[i]; }
   //	const T& operator[]( const unsigned i ) const{ return nodes[i]; }
 
@@ -528,6 +532,29 @@ int PhyloTree<T>::smooth(){
 	  
   std::cout << "Removed " << count << " 1-child nodes, WARNING: You may want to renumber() the tree\n";
   return count;
+}
+
+///////////////////////////////////////////////////////////////////////
+template< class T >
+int PhyloTree<T>::check_root(){
+  // the tree shoudl already be smoothed before this...
+
+  if( root->children.size() == 2 ){ std::cout << "TEST\n"; return 0; } // The root is already fine, just return
+  if( root->children.size() != 1 ){ 
+    std::cout << "ERROR: Strange root with " << root->children.size() << "children\n"; 
+    return 1;
+  }
+  typename std::list<T>::iterator newroot;
+  // Set the new root to be the child of the old root
+  newroot = *(root->children.begin());
+  // The new root should have no parents
+  newroot->parents.clear();
+  // Erase the old root, reset the root variable
+  nodes.erase(root);
+  root = newroot;
+  std::cout << "Reset the root\n";
+
+  return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////
