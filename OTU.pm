@@ -1,5 +1,23 @@
 #!/usr/bin/perl -w
 
+#OTU.pm - The PhylOTU workflow manager
+#Copyright (C) 2011  Thomas J. Sharpton 
+#author contact: thomas.sharpton@gladstone.ucsf.edu
+#
+#This program is free software: you can redistribute it and/or modify
+#it under the terms of the GNU General Public License as published by
+#the Free Software Foundation, either version 3 of the License, or
+#(at your option) any later version.
+#    
+#This program is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#GNU General Public License for more details.
+#    
+#You should have received a copy of the GNU General Public License
+#along with this program (see LICENSE.txt).  If not, see 
+#<http://www.gnu.org/licenses/>.
+
 package OTU;
 
 use strict;
@@ -195,6 +213,83 @@ sub set_blastdb{
     return $self;
 }
 
+=head2 format_blast_db
+
+ Title   : format_blast_db
+ Usage   : $project->format_blast_db
+ Function: Format nt FASTA file into blast database. Here we use it to 
+           format the STAP databases. Autoskips if this is already done.
+ Example : $project->format_blast_db
+ Returns : None
+ Args    : None
+
+=cut
+
+sub format_blast_db{
+  my $self = shift;
+  for my $set ( @{ $self->{"domains"} } ){
+    my $sourcepath  = $self->{"workdir"} . "data/stap_16S_" . "$set" . ".fa";
+    my ( $source, @suffixlist) = fileparse( $sourcepath );
+    my $database    = $self->{"db"}->{"blastdb"}  . $self->{"blastdb"}->{$set};
+    if( -e $database ){
+      warn "Blast database exists at $database, so skipping formatdb\n";
+      next;
+    }
+    else{
+      copy ( $sourcepath, $database );
+      print "Formatting blast database " . $self->{"blastdb"}->{$set} . "\n";
+      my @args = ("-i $database", "-p F");
+      my $results = capture( "formatdb @args" );
+      if( $EXITVAL != 0 ){
+	warn("Error running formatdb in format_blast_db!\n");
+	exit(0);
+      }
+    }
+  }
+  return $self;
+}
+
+=head2 build_cm_model
+
+ Title   : format_blast_db
+ Usage   : $project->build_cm_model( $set, $ref_aln )
+ Function: Builds a CMmodel given a reference stockholm alignment. Copies the alignment
+           to the $masterdir/reference/aligns/ directory. Dumps model into 
+           $masterdir/reference/profiles/ directory. 
+ Example : $project->build_cm_model( "BAC", "SSU_BAC_ref.stk" );
+ Returns : None
+ Args    : The name of the domain for which the model is being built and the absolute path
+           to the location of the reference stockholm alignment
+
+=cut
+
+sub build_cm_model{
+  my $self    = shift;
+  my $ref_aln = shift;
+  my $set     = shift; 
+  #Come back in and grab the ref alignment name to enable multiple models in single db
+  #my ( $name, $path, $suffix ) = fileparse( $ref_aln, qr/\.[^.]*/ );
+  my $db_ref_aln =  $self->{"db"}->{"ref_align"} . "SSU_" . $set . "_ref.stk";
+  if( -e $db_ref_aln ){
+    print "A reference alignment with the same name as the one you're using already exists in the PhylOTU datase at $db_ref_aln. Please remove this alignment before proceeding and then rerun. I don't want to overwrite a file you might need.\n";
+    die;
+  }
+  copy ( $ref_aln , $db_ref_aln );
+  my $model = $self->{"db"}->{"profile"} . "SSU_" . $set . ".mod";
+  if( -e $model ){
+    print "A CMmodel with the same name as the one you are trying to build already exists in the PhylOTU datase at $model. Please remove this model before proceeding and then rerun. I don't want to overwrite a file you might need.\n";
+    die;
+  }
+  print "Building CMmodel $model...\n";
+  my @args = ("--rf", "--ere 1.4", "$model", "$db_ref_aln");
+  my $results = capture( "cmbuild @args" );
+  if( $EXITVAL != 0 ){
+    warn("Error running cmbuild in build_cm_model!\n");
+    exit(0);
+  }
+  return $self;
+}
+
 =head2 load_blastreports
 
  Title   : load_blastreports
@@ -240,7 +335,6 @@ sub run_SSU_blast{
 	my $blastreport = $self->{"db"}->{"blastout"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . ".blast";
 	$self->{"breports"}->{$set} = $blastreport;
 	my @args = ("-p blastn", "-i $input", "-d $database", "-o $blastreport", "-m 8", "-e $blaste");
-#	my @args = ("-p blastn", "-i $input", "-d $database", "-o $blastreport", "-e $blaste");
 	my $results = capture( "blastall @args" );
 	if( $EXITVAL != 0 ){
 	    warn("Error running $blasttype in run_SSU_blast!\n");
@@ -410,7 +504,7 @@ sub grab_SSU_reads{
 	    my $outset   = $hsp_data{"set"};
 	    #Consider if this should be exact match or not...
 	    if( $passing_id eq $id ){
-		print "match at $passing_id and $id\n";
+		#print "match at $passing_id and $id\n";
 		if($qc == 1 || $qc == 2){
 		    #grab only homologous subsequences of $seq from top HSP
 		    my $qstart = $hsp_data{'qstart'};
@@ -443,6 +537,27 @@ sub grab_SSU_reads{
     }    
 }
 
+sub reset_domains_by_SSU_size{
+  my $self = shift;
+  my @domains = @{ $self->{"domains"} };
+  my @reset_domains = ();
+  foreach my $set ( @domains) {
+    my $ssufile = $self->{"db"}->{"SSU_reads"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . ".fa";
+    my $filesize = -s $ssufile;
+    if( $filesize == 0 ){
+      print "There were no 16S rRNA sequences in your sample for the domain set $set. This domain will be ignored for all downstream analyses.\n";
+      next;
+    }
+    else{
+      print "Found 16S hits for the domain set $set.\n";
+      push( @reset_domains, $set );
+    }
+  }
+  $self->set_domains( \@reset_domains );
+  return( \@reset_domains );
+}
+
+
 =head2 run_cmalign
 
  Title   : run_cmalign
@@ -461,6 +576,7 @@ sub run_cmalign{
     my @domains   = @{ $self->{"domains"} };
     my $set_ct    = 0;
     foreach my $set ( @domains) {
+        print "Aligning 16S reads to CMmodel for domain set $set...\n";
 	my $sequences = $self->{"db"}->{"SSU_reads"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . ".fa";
 	next unless( -e $sequences );
 	my $outaln    = $self->{"db"}->{"all_align"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all.sto";
@@ -533,6 +649,8 @@ sub format_alignments{
 
 =cut
 
+#Note: there are other qc scripts included in the repository, the ScoreInternalGap coupled with run_align_ColQC is
+#recommended for speed.
 sub run_align_qc{
     my ( $self, $lencut ) = @_;
     my @domains   = @{ $self->{"domains"} };
@@ -545,9 +663,9 @@ sub run_align_qc{
         my $cmscores = $self->{"db"}->{"cm_scores"} . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_cmscores.tab";
         #run with flat on to prevent printing of seq coords in headers                                                                                                    
         my @args     = ("-i $inaln", "-o $outaln", "-s $cmscores", "-flat", "-lc $lencut -g $gapaln");
-        my $results  = capture( "perl " . $self->{"workdir"} . "align2profile_qc.pl @args");
+        my $results  = capture( "perl " . $self->{"workdir"} . "align2profile_qc_ScoreInternalGap.pl @args");
         if( $EXITVAL != 0 ){
-            warn("Error running align2profile_qc.pl for $inaln!\n");
+            warn("Error running align2profile_qc_ScoreInternalGap.pl for $inaln!\n");
             exit(0);
         }
         $set_ct++;
@@ -610,8 +728,6 @@ sub run_align_ColQC{
 
 =cut
 
-
-#might need to prune reference sequences from this file too, not sure how mothur handles this...
 sub align_to_seqs{
     my ( $self, $formatid )  = @_;
     my @domains   = @{ $self->{"domains"} };
@@ -873,7 +989,7 @@ sub run_mothur{
 #    my $command  = "#set.dir(output=$outdir); read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method); bin.seqs(fasta=$seqfile)";
 #    my $command  = "#read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method); bin.seqs(fasta=$seqfile)";
     #Having problems getting bin.seqs to work inside mothur, so we'll dot it ourselves later
-    my $command  = "#read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method);";
+    my $command  = "#set.dir(output=$outdir); read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method, cutoff=$cutoff);";
     print "executing mother using $command\n";
     my $results  = capture( "mothur \"$command\"" );
     if( $EXITVAL != 0 ){
@@ -954,7 +1070,7 @@ sub split_query{
 
     foreach my $set ( @list ) {
       $path =~ s/raw\///g;
-      my $oldraw    = $path    . "raw/"          .$name    . ".fa";
+      my $oldraw    = $path    . "raw/"           . $name    . ".fa";
       my $oldscore  = $path    . "aligns/scores/" . $name    . "_SSU_" . $set . "_cmscores.tab";
       my $infile;
       if( $type =~ "blast"){
@@ -1928,7 +2044,7 @@ sub sim_run_mothur{
 #    my $command  = "#set.dir(output=$outdir); read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method); bin.seqs(fasta=$seqfile)";
 #    my $command  = "#read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method); bin.seqs(fasta=$seqfile)";
     #Having problems getting bin.seqs to work inside mothur, so we'll dot it ourselves later
-    my $command  = "#read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method);";
+    my $command  = "#set.dir(output=$outdir); read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method);";
     print "executing mother using $command\n";
     my $results  = capture( "mothur \"$command\"" );
     print $results ."\n";
@@ -1936,14 +2052,15 @@ sub sim_run_mothur{
       warn("Error running mothur for $inmat!\n");
       exit(0);
     }  
-    $command  = "#read.dist(phylip=$refinmat, cutoff=$cutoff); cluster(method=$method);";
+    $command  = "#set.dir(output=$outdir); read.dist(phylip=$refinmat, cutoff=$cutoff); cluster(method=$method);";
     print "executing mother using $command\n";
     $results  = capture( "mothur \"$command\"" );
     print $results . "\n";
     if( $EXITVAL != 0 ){
       warn("Error running mothur for $refinmat!\n");
       exit(0);
-    }  
+    }
+    
   }
 }
 

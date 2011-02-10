@@ -1,15 +1,69 @@
 #!/usr/bin/perl -w
 
+#otu_handler.pl - The PhylOTU control script
+#Copyright (C) 2011  Thomas J. Sharpton 
+#author contact: thomas.sharpton@gladstone.ucsf.edu
+#
+#This program is free software: you can redistribute it and/or modify
+#it under the terms of the GNU General Public License as published by
+#the Free Software Foundation, either version 3 of the License, or
+#(at your option) any later version.
+#    
+#This program is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#GNU General Public License for more details.
+#    
+#You should have received a copy of the GNU General Public License
+#along with this program (see LICENSE.txt).  If not, see 
+#<http://www.gnu.org/licenses/>.
+
 use strict;
 use OTU;
 use File::Spec;
 use Getopt::Long;
 use IPC::System::Simple qw(capture $EXITVAL);
 
-my ( $samp_path, $sim_read2source_tab );
-#This is an optional simulation specific variable; not necessary for analysis of metagenomic libraries
-my $reference_tree = "/netapp/home/sharpton/projects/OTU/db/reference/trees/SSU_BAC_ref_unaln_SSU_BAC_FT_pseudo_pruned_fmt.tree";
-my $is_sim     = 0;
+########################
+# USER RUNTIME OPTIONS #
+########################
+#hard code run-time parameters here, especially for frequently used parameters
+
+#General parameters
+my $scripts_path = "/Users/sharpton/projects/OTU/PhylOTU/"; #where is the PhylOTU code located? Include trailing slash
+#/netapp/home/sharpton/projects/OTU/PhylOTU/
+#/netapp/home/sharpton/projects/OTU/db/
+my $masterdir    = "/Users/sharpton/projects/OTU/testdb/"; #where is your PhylOTU flat file database located? Include trailing slash
+my $first_build  = 0; #Set to 1 if you want to initialize the flat file db. 
+my $ref_aln      = ""; #where is the reference alignment located? Used to build the CMmodel. Only need it once, so run-time option recommended
+
+my $samp_path    = ""; #point to a sample metagenomic sequence file to process. Required
+my $skipto       = ""; # skip to various steps in workflow. Select one of the below. Optional. Must have conducted all prior steps for successful skip.
+                   #A = Alignment, Q = alignment(Q)c, T = Tree assembly, M = tree2Matrix, C = OTU Clustering 
+my $bac          = 0; #This switch determines the bacterial domain should be processed by PhylOTU:
+                   #0 = NO
+                   #1 = YES
+my $arc          = 0; #This switch determines the archeal domain should be processed by PhylOTU:
+                   #0 = NO
+                   #1 = YES
+my $trim         = 2; #Should the reads be trimmed to just the 16S sequence via blast analysis?
+                   #0 = no trimming, use complete read
+                   #1 = trim to the top HSP coordinates
+                   #2 = tile HSPs from top hit, use the best tile, and trim to this tile's coordinates
+my $ecutoff      = 0.000001; #blast e-value cutoff for fishing 16S reads from sample
+my $seqlencut    = 100; #minimum sequence length threshold
+my $tree_method  = "fasttree"; #what tree building method should be implemented. currently the only choice, but why not build your own?
+my $tree_to_matrix_code = "R"; #select whether to use R or C++ to convert your tree to a matrix. C++ is faster and recommended
+  # c = c++ code, output formatted for mothur (will implement ESPRIT if needed)
+  # R = R script, output formatted for mothur
+my $clust_method = "average"; #MOTHUR hierarchical clustering method. Select from average, furthest, nearest as per MOTHUR manual
+my $clust_cutoff = 0.15; #OTU clustering cutoff
+my $build_model  = 0; #Should cmbuild be run? Odds are good this should be 0, set to 1 if you need to build a model (e.g., first run).
+my $cluster_code = "M"; #Use Mothur or ESPRIT for OTU clustering.
+  # M = mothur, requires matrix format from tree_to_matrix (R or c++)
+  # E = ESPRIT, requires distance list and frequency list (c++ code only)
+
+#Parallelazation specific parameters
 my $numblast   = 1;
   # -1 = run only blast (for parallel jobs)
   # 1  = run one blast
@@ -25,21 +79,48 @@ my $numTreeMat = 1;
 my $startMat   = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
 my $endMat     = 0;  # Only needs to be specified when parallel tree_to_matrix jobs are running
 my $T2M_domain = ""; # Only needs to be specified when parallel tree_to_matrix jobs are running
-my $skipto     = ""; # skip to (A)lignment, alignment(Q)c, (T)ree, tree2(M)atrix, (C)lustering 
-my $clust_cutoff = 0.15;
+
+#Simulation specific parameters. These are not recommended unless you want to develop validation tests:
+my $is_sim              = 0; #Set to 1 if you want to run a simulation, affects which subroutines are implemented
+my $sim_read2source_tab = ""; #Point to a file that maps read identifiers to source (reference sequence) identifiers
+my $reference_tree      = "../db/reference/trees/SSU_BAC_ref_unaln_SSU_BAC_FT_pseudo_pruned_fmt.tree"; #Point to a reference sequence phylogeny
+
+#get runtime parameters, especially for frequently changed parameters
 GetOptions(
-    'i=s' => \$samp_path,
-    'sim' => \$is_sim,
-    'r=s' => \$reference_tree,
-    'b=i' => \$numblast,
-    'a=i' => \$numalnQC,
-    'm=i' => \$numTreeMat,
-    's=i' => \$startMat,
-    'e=i' => \$endMat,
-    'd=s' => \$T2M_domain,
-    'k=s' => \$skipto,
-    'cc:f'=> \$clust_cutoff,
+    'i=s'     => \$samp_path,
+    'first'   => \$first_build,
+    'db:s'    => \$masterdir,
+    'sd:s'    => \$scripts_path,
+    'b:i'     => \$numblast,
+    'a:i'     => \$numalnQC,
+    'm:i'     => \$numTreeMat,
+    's:i'     => \$startMat,
+    'e:i'     => \$endMat,
+    'd:s'     => \$T2M_domain,
+    'k:s'     => \$skipto,
+    'cc:f'    => \$clust_cutoff,
+    'ec:f'    => \$ecutoff,
+    'lc:i'    => \$seqlencut,
+    't:i'     => \$trim,
+    'sim'     => \$is_sim,
+    'r:s'     => \$reference_tree,
+    'model'   => \$build_model,
+    'clust:s' => \$clust_method,
+    'tree:s'  => \$tree_method,
+    'tcode:s' => \$tree_to_matrix_code,
+    'ccode:s' => \$cluster_code,
+    'bac'     => \$bac,
+    'arc'     => \$arc,
+    'ra:s'    => \$ref_aln,
     );
+
+my @domains = ();
+if( $bac ){
+  push( @domains, "BAC" );
+}
+if( $arc ){
+  push( @domains, "ARC" );
+}
 if( $numTreeMat > 0 && ( $startMat!=0 || $endMat!=0 )){
   print "tree_to_matrix not running in parallel mode, start and end step to full matrix printing\n";
   $startMat = 0;
@@ -48,35 +129,15 @@ if( $numTreeMat > 0 && ( $startMat!=0 || $endMat!=0 )){
 if( $is_sim ){
     print "You are running handler for simulations!\n";    
 }
+if( $first_build ){
+  print "Initializing database...\n";
+}
 my $do_pruning = $numTreeMat;
 print "Processing $samp_path\n";
-########################
-# USER RUNTIME OPTIONS #
-########################
 
-my @domains   = qw(BAC ARC);
-#my @domains   = qw( BAC );
-my $ecutoff   = 0.000001;
-my $trim      = 2; #Should the reads be trimmed to just the 16S sequence via blast analysis?
-                   #0 = no trimming, use complete read
-                   #1 = trim to the top HSP coordinates
-                   #2 = tile HSPs from top hit, use the best tile, and trim to this tile's coordinates
-my $masterdir    = "/netapp/home/rebeccamae/PhylOTU/db2/"; #upper level directory
-#my $masterdir    = "/netapp/home/sharpton/projects/OTU/db/"; #upper level directory
-my $scripts_path = "/netapp/home/rebeccamae/PhylOTU/code/"; #where the code is stored
-#my $scripts_path = "/netapp/home/sharpton/projects/OTU/PhylOTU/"; #where the code is stored
-my $seqlencut    = 100;
 my $mincoverage  = 2;
 #my $clust_cutoff = 0.15;#moved above!
-my $clust_method = "average";
-my $tree_method  = "fasttree";
 my $dist_cutoff  = 2*$clust_cutoff;  # used to print shortened tree_to_matrix list for ESPRIT, bigger than the clustering threshold for safety
-my $tree_to_matrix_code = "c";
-  # c = c++ code, output formatted for mothur (will implement ESPRIT if needed)
-  # R = R script, output formatted for mothur
-my $cluster_code        = "E";
-  # M = mothur, requires matrix format from tree_to_matrix (R or c++)
-  # E = ESPRIT, requires distance list and frequency list (c++ code only)
 if( ($tree_to_matrix_code eq 'R') && ($cluster_code ne 'M') ){
   print "ERROR: clustering method ESPRIT requires output format not implemented in R, quitting\n";
   exit;
@@ -84,10 +145,12 @@ if( ($tree_to_matrix_code eq 'R') && ($cluster_code ne 'M') ){
 #######################################
 # SET UP FLAT FILE DATABASE STRUCTURE #
 #######################################
+#$simtype is used only when -sim is set. You probably don't need to worry about it
 #Note: sim 1 (prune sim) is testing how read tree compares to source/ref tree
 #sim 2 (readsource sim) is testing how reads and sources co cluster on same tree
 #sim 3 is prune sim with padded ends; ultrashort and 2 reads/source
 my $simtype = 1;
+
 my $project = OTU->new();
 if( $is_sim ){
     $project->set_simulation();
@@ -99,6 +162,16 @@ $project->set_tree_method( $tree_method );
 $project->build_db( $masterdir );
 $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
 $project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
+$project->format_blast_db();
+if( $first_build || $build_model ){
+  foreach my $set( @domains ){
+    $project->build_cm_model( $ref_aln, $set);
+  }
+}
+if( $first_build ){
+  print "Database initialization complete!\n";
+  die;
+}
 
 #######################################
 # Jump to the appropriate step
@@ -124,6 +197,8 @@ if( $numblast > 1 ){
   $project->grab_SSU_reads( $ecutoff, $trim ); 
   if( $numblast == -1 ){ exit; }  # parallel mode, only run blast then quit
 }
+#If a domain has no 16S hits, stop processing it here (INFERNAL will break with nothing to align)
+@domains = @{ $project->reset_domains_by_SSU_size };
 
 ALIGN:
 $project->run_cmalign();
@@ -259,7 +334,7 @@ sub parallel
 
 
 ##############################################################
-# Submit a blast job to the queue
+# Submit a blast job to the SGE queue
 # The queue commands may need to be modified on other systems
 ##############################################################
 sub submit

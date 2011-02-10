@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-#align2profile_qc_OnlyScore.pl - alignment cleanup by alignment score
+#align2profile_qc_full.pl - alignment cleanup (columns and rows - SLOW)
 #Copyright (C) 2011  Thomas J. Sharpton 
 #author contact: thomas.sharpton@gladstone.ucsf.edu
 #
@@ -23,7 +23,6 @@ use Bio::AlignIO;
 use Getopt::Long;
 use Bio::Align::Utilities qw(:all);
 
-
 #CONSIDERATIONS/RESTRICTIONS
 #Currently, all thresholds are inclusive (if you equal threshold, you stay)
 #For all gap based cutoffs, only gaps relative to the profile are considered (-). "." are ignored for cutoff purposes.
@@ -32,7 +31,7 @@ use Bio::Align::Utilities qw(:all);
 #Currently, alignment masking is the excition of columns, so not ideal for protein space (should replace with N|?)
 
 #Var initializatoin
-my ($input, $output, $gapfile, $seq_scores_tab, $lookup_list, $flat);
+my ($input, $output, $seq_scores_tab, $lookup_list, $flat);
 my ($seq_len_cut, $aln_seq_score_cut, $aln_seq_p_cut, $aln_seq_score_rat, $gap_ratio_cut, $mm_ratio_cut, $pcnt_cov_cut, $ngaps_internal_cut, $gappy_col_cut);
 my ($gap_window, $mm_window, $aln_format);
 
@@ -54,7 +53,6 @@ $aln_format         = "fasta";
 GetOptions(
 	   "i=s"   => \$input,              #Path to alignment object(s)
 	   "o=s"   => \$output,             #Output file path
-	   "g=s"   => \$gapfile,            #Coverage info file path
 	   "s:s"   => \$seq_scores_tab,     #Formatted for INFERNAL verbose output
 	   "l:s"   => \$lookup_list,        #Path to list of sequence ids to prune from alignment
 	   "lc:i"  => \$seq_len_cut,        #Minimum sequence length cutoff
@@ -88,7 +86,6 @@ my %seq_scores = ();
 if (defined($seq_scores_tab)){
   %seq_scores = %{ process_seq_score_tab($seq_scores_tab) };
 }
-
 my %init_prunes = ();
 if(defined($lookup_list)){
   %init_prunes = %{ process_lookup_list($lookup_list) };
@@ -103,8 +100,8 @@ while( my $aln = $in_aln->next_aln() ){
   }
   my $nseqs  = $aln->num_sequences();
   my $alnlen = $aln->length();
-  my @coverage = ();
-
+  #build a sequence, gap, insert map of the alignment
+  #my %pre_alignment_map = %{ build_alignment_map( $aln ) };
   foreach my $seq ($aln->each_seq) {
     my $to_prune   = 0;
     my @reasons    = ();
@@ -115,21 +112,36 @@ while( my $aln = $in_aln->next_aln() ){
     $seq_seq       =~ s/\-//g;
     $seq_seq       =~ s/\.//g;
     my $seqlen     = length( $seq_seq );
-
+    my $residues   = $sequence;
+    $residues      =~ s/(\-|\.)|//g;
+    my $n_residues = length($residues);
+#    my @seqarray   = split("", $sequence);
+#    for(my $i=0; $i < $alnlen; $i++){
+#      $pre_alignment_map{ $i+1 }{ $seqarray[$i] }++;
+#    }     
     #SEQUENCE IDS A LOOKUP FILE SAYS TO PASS ON
     foreach my $prune_id ( keys( %init_prunes ) ){
-      if($id =~ m/$prune_id/){
-	$to_prune = 1;
-	last;
-      }
+     if($id =~ m/$prune_id/){
+       $to_prune = 1;
+       last;
+     }
     }
     #SEQUENCE LENGTH
     if($seqlen < $seq_len_cut){
       $to_prune = 1;
     }
     #INTERNAL GAPS
-    # Don't do this anymore
-
+    if(defined($ngaps_internal_cut)){
+      my $cpseq = $sequence;
+      #only want internal gaps (bounded by sequence) so let's remove leading and lagging
+      $cpseq =~ s/^(\-|\.)+//;
+      $cpseq =~ s/(\-|\.)+$//;
+      #now count the total number of gaps
+      my $ngaps = $cpseq =~ tr/\-/\-/;
+      if ($ngaps > $ngaps_internal_cut){
+	$to_prune = 1;
+      }
+    }
     #SCORE AND P-VAL BASED CUTOFF PROCESING
     if(defined($seq_scores_tab)){
       if(defined($seq_scores{$id})){  #IF NOT, ASSUME IT'S REFERENCE SEQUENCE USED TO BUILD MODEL INCLUDED IN ALIGNMENT (MEANS THAT IT'S A GOOD READ)
@@ -140,57 +152,99 @@ while( my $aln = $in_aln->next_aln() ){
 	  $to_prune = 1;
 	}
 	if(defined($aln_seq_score_rat) ){
-	  my $score_per_residue = $seq_scores{$id}{"score"} / $seqlen;
+	  my $score_per_residue = $seq_scores{$id}{"score"} / $n_residues;
 	  if( $score_per_residue < $aln_seq_score_rat ){
 	    $to_prune = 1;
 	  }
 	}
       }
     }
-
     #DO THE PRUNING OF THE SEQUENCES HERE
     if($to_prune){
       #print "Pruning $id\n";
       $aln->remove_seq($seq);
-    } else {
-
-      #ACCUMULATE COVERAGE INFO
-      my $AccSeq    =  $sequence;
-      $AccSeq       =~ s/(\.|\-)/0/g;        # non-filled position
-      $AccSeq       =~ s/([a-z]|[A-Z])/1/g;  # filled position
-      my @AccNum = split(//, $AccSeq);       # Convert to an array
-      if( @coverage ){
-	my $nres = @AccNum;
-	for( my $i=0; $i< $nres; $i++ ){
-	  $coverage[$i] = $coverage[$i] +$AccNum[$i]; # Accumulate the coverage
-	}
-      } else {
-	@coverage     = @AccNum;
+    }
+  }
+  #%pre_alignment_map = ();
+  
+  #POST PRUNING ALIGNMENT CLEANUP/MASKING
+  #Now iterate through the sequences that passed and remove bad columns from the alignment.
+  #make sure all sequences are the same length
+  if( !$aln->is_flush() ){
+    warn "Alignment is no longer flush, passing!\n";
+    next;
+  }
+  my $post_nseqs  = $aln->num_sequences();
+  my $postalnlen = $aln->length();
+  #Build a processed alignment map
+  my %post_alignment_map = %{ build_alignment_map( $aln ) };
+  #purge gappy columns using %post_alignment_map
+  my @gappy_cols = ();
+  foreach my $pos( sort { $a <=> $b } ( keys( %post_alignment_map ) ) ){
+    if(defined($post_alignment_map{$pos}{"."}) && $post_alignment_map{$pos}{"."}/$post_nseqs > $gappy_col_cut){
+      #print "$pos\t$post_alignment_map{$pos}{'.'}\n";
+      push(@gappy_cols, $pos);
+    }
+  }
+  my $n_gappy_cols = @gappy_cols;
+  my $gap_start = $gappy_cols[0];  #Keep all start and stop vars in aln coordinate space (1 based)
+  my $gap_stop  = 1;
+  my $aln_start = 1;
+  my $aln_stop  = $postalnlen;
+  my @aln_slices = ();
+  $aln->map_chars('-', 'N');  #Must mask gaps for splicing to work later
+  for ( my $n = 0; $n < $n_gappy_cols; $n++ ){
+    my $slice;
+    if ( exists( $gappy_cols[ $n + 1] ) && $gappy_cols[ $n ] + 1 == $gappy_cols[ $n + 1 ] ){
+      #then monotonic increase, move on
+      next;
+    }
+    else{
+      #check to see if gaps start at beginning of aln, if so, reset gap_start and move on
+      if( $aln_start == $gap_start ){
+	$gap_start = $gappy_cols[ $n + 1 ];
+	$gap_stop  = $gappy_cols[ $n ];
+	next;
+      }
+      #deal with the lefthand-most aln block
+      elsif( !@aln_slices ){
+	$slice = $aln->slice( $gap_stop, $gap_start - 1 );
+	push( @aln_slices, $slice );
+	$gap_start = $gappy_cols[ $n + 1 ];
+	$gap_stop  = $gappy_cols[ $n ];
+      }
+      #deal with the righthand-most aln block
+      elsif( $n+1 == $n_gappy_cols && $gappy_cols[$n] < $aln_stop ){
+	#need to process the aln blocks on both sides of the gappy column block
+	#get the left side:
+	$slice = $aln->slice( $gap_stop + 1, $gap_start - 1 );
+	push( @aln_slices, $slice );
+	$gap_stop = $gappy_cols[$n];
+	#get the right side:
+	$slice = $aln->slice( $gap_stop + 1, $aln_stop );
+	push( @aln_slices, $slice );
+      }
+      else{
+	$slice = $aln->slice( $gap_stop + 1, $gap_start - 1);
+	push( @aln_slices, $slice );
+	$gap_start = $gappy_cols[ $n + 1];
+	$gap_stop  = $gappy_cols[$n];
       }
     }
   }
-
-  # PRINT coverage info: number of sequences, coverage at each residue, % coverage at each residue
-  my $nseq = $aln->num_sequences();
-  my $nres = @coverage;
-  unlink($gapfile);
-  open( GAP, ">>$gapfile" ) || die "can't open output $gapfile in stitch_alignQC:$!\n";
-  print GAP "$nseq\n";
-  my $format = ("%1.0f " x @coverage)."\n";
-  printf GAP $format, @coverage;
-  for( my $i=0; $i< $nres; $i++ ){
-    $coverage[$i] = $coverage[$i]/$nseq;          # Accumulate the coverage
-  }
-  $format = ("%1.5f " x @coverage)."\n";
-  printf GAP $format, @coverage;
-  close GAP;
-
+  %post_alignment_map=();
+  #now stitch alignment together
+  my $clean_aln = cat(@aln_slices);
+  #map back to gap chars
+  $aln->map_chars('N','-');
+  $clean_aln->map_chars('N','-');
+  #Build final alignment map
+  my %final_alignment_map = %{ build_alignment_map( $clean_aln ) };
+  produce_aln_profile_data( \%final_alignment_map );
   if( $flat ){
-    $aln->set_displayname_flat();
+    $clean_aln->set_displayname_flat();
   }
-  $out_aln->write_aln($aln);
-#  $now = localtime time;  print"Done align2profile at $now\n";
-  
+  $out_aln->write_aln($clean_aln);
 }
 
 ####################################
