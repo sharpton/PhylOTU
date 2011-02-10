@@ -152,36 +152,61 @@ sub set_domains{
 =cut
 
 sub build_db{
-    my ( $self, $masterdir ) = @_;    
+    my ( $self, $masterdir, $first ) = @_;    
     if( !( -e $masterdir ) ){
 	mkdir( $masterdir );
     }
     my $sample    = $self->{"sample"}->{"name"};
     my $sampledir = $masterdir . "samples/" . $sample;
-    $self->{"db"} = {
-	#BLASTDBS
-	blastdb   => $masterdir . "/blastdbs/",
-	blastout  => $masterdir . "/blastout/",
-	#REFERENCE DATA
-	profile   => $masterdir . "/reference/profiles/",
-	ref_align => $masterdir . "/reference/aligns/",
-	#SAMPLE DATA        
-	reads     => $sampledir . "/raw/",
-	SSU_reads => $sampledir . "/SSU/",
-	all_align => $sampledir . "/aligns/raw/",
-	cm_scores => $sampledir . "/aligns/scores/",
-	qc_align  => $sampledir . "/aligns/qc/",
-	qc_seqs   => $sampledir . "/all_qc_seqs/",
-	tree      => $sampledir . "/trees/",
-	matrix    => $sampledir . "/matrix/",
-	otudir    => $sampledir . "/otus/",
-    };
+    if( $first ){
+        $self->{"db"} = {
+			 #BLASTDBS
+			 blastdb   => $masterdir . "/blastdbs/",
+			 blastout  => $masterdir . "/blastout/",
+			 #REFERENCE DATA
+			 profile   => $masterdir . "/reference/profiles/",
+			 ref_align => $masterdir . "/reference/aligns/",
+			 #SAMPLE DATA        
+			 #reads     => $sampledir . "/raw/",
+			 #SSU_reads => $sampledir . "/SSU/",
+			 #all_align => $sampledir . "/aligns/raw/",
+			 #cm_scores => $sampledir . "/aligns/scores/",
+			 #qc_align  => $sampledir . "/aligns/qc/",
+			 #qc_seqs   => $sampledir . "/all_qc_seqs/",
+			 #tree      => $sampledir . "/trees/",
+			 #matrix    => $sampledir . "/matrix/",
+			 #otudir    => $sampledir . "/otus/",
+			};
+      }
+    else{
+      $self->{"db"} = {
+		       #BLASTDBS
+		       blastdb   => $masterdir . "/blastdbs/",
+		       blastout  => $masterdir . "/blastout/",
+		       #REFERENCE DATA
+		       profile   => $masterdir . "/reference/profiles/",
+		       ref_align => $masterdir . "/reference/aligns/",
+		       #SAMPLE DATA        
+		       reads     => $sampledir . "/raw/",
+		       SSU_reads => $sampledir . "/SSU/",
+		       all_align => $sampledir . "/aligns/raw/",
+		       cm_scores => $sampledir . "/aligns/scores/",
+		       qc_align  => $sampledir . "/aligns/qc/",
+		       qc_seqs   => $sampledir . "/all_qc_seqs/",
+		       tree      => $sampledir . "/trees/",
+		       matrix    => $sampledir . "/matrix/",
+		       otudir    => $sampledir . "/otus/",
+		      };
+    }
     foreach my $path ( keys( %{ $self->{"db"} } ) ){
 	make_path( $self->{"db"}->{$path} );
     }
+    make_path( $sampledir );
     #push raw sample data into proper db spot - for now we copy!
-    unless( $self->{"sample"}->{"path"} eq $self->{"db"}->{"reads"} . $self->{"sample"}->{"file"} ){
+    if( !$first ){
+      unless( $self->{"sample"}->{"path"} eq $self->{"db"}->{"reads"} . $self->{"sample"}->{"file"} ){
 	copy ($self->{"sample"}->{"path"} , $self->{"db"}->{"reads"} . $self->{"sample"}->{"file"} );
+      }
     }
     return $self->{"db"};
 }
@@ -692,6 +717,11 @@ sub run_align_ColQC{
   my ( $self, $min ) = @_;
   my @domains   = @{ $self->{"domains"} };
   my $set_ct    = 0;
+  if( !( -e ( $self->{"workdir"} . "align2profile_qc_Col" ) ) ){
+    print "You haven't compiled align2profile_qc_Col.cpp. Please run the following command to compile:\n g++ align2profile_qc_Col.cpp -o align2profile_qc_Col\nand then restart PhylOTU using the -k Q option to restart this step\n";
+    die;
+  }
+
   foreach my $set ( @domains) {
     my $aln      = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc.fa";
     my $rowaln   = $self->{"db"}->{"qc_align"}  . $self->{"sample"}->{"name"} . "_SSU_" . $set . "_all_qc_rows.fa";
@@ -898,6 +928,10 @@ sub tree_to_matrix_cpp{
   my $dom = "";
   ( $self, $mstart, $mend, $format, $cutoff, $do_pruning, $dom )  = @_;
   my @domains;
+  if( !( -e ( $self->{"workdir"} . "tree_to_matrix_cpp" ) ) ){
+    print "You haven't compiled tree_to_matrix_cpp. Please run the following command to compile (requires the Boost library):\n g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix\nand then restart PhylOTU using the -k Mg++ align2profile_qc_Col.cpp -o align2profile_qc_Col option to restart this step\n";
+    die;
+  }
   if( $dom ){
     @domains = ( $dom );
   } else {
@@ -991,6 +1025,7 @@ sub run_mothur{
     #Having problems getting bin.seqs to work inside mothur, so we'll dot it ourselves later
     my $command  = "#set.dir(output=$outdir); read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method, cutoff=$cutoff);";
     print "executing mother using $command\n";
+    print "Note: Please check your version of MOTHUR. We have found a possible bug in MOTHUR v.1.16.1 that may affect the number of OTUs reported at your desired cutoff. We are working with the Schloss lab to resolve this. We advise substantially increasing your desired cutoff or rolling back to a prior version of MOTHUR to avoid the bug in the interim.\n";
     my $results  = capture( "mothur \"$command\"" );
     if( $EXITVAL != 0 ){
       warn("Error running mothur for $inmat!\n");

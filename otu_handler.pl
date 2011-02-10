@@ -121,6 +121,14 @@ if( $bac ){
 if( $arc ){
   push( @domains, "ARC" );
 }
+if( !( @domains ) ){
+  print "You have not specified which phylogenetic domains to process. Use the -bac and/or -arc parameters.\n";
+    die;
+}
+if( !$first_build && !$samp_path ){
+  print "You have not specified which sample should be processed. Use the -i option and point to the sample FASTA library.\n";
+  die;
+}
 if( $numTreeMat > 0 && ( $startMat!=0 || $endMat!=0 )){
   print "tree_to_matrix not running in parallel mode, start and end step to full matrix printing\n";
   $startMat = 0;
@@ -159,7 +167,7 @@ $project->set_otu_workdir( $scripts_path );
 $project->set_sample( $samp_path );
 $project->set_domains( \@domains );
 $project->set_tree_method( $tree_method );
-$project->build_db( $masterdir );
+$project->build_db( $masterdir, $first_build );
 $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
 $project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
 $project->format_blast_db();

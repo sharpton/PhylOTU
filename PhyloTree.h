@@ -13,8 +13,10 @@
 #include <stack>
 
 /*PhyloTree.h - Tree parsing and navigation routines
-Copyright (C) 2011  Thomas J. Sharpton 
-author contact: thomas.sharpton@gladstone.ucsf.edu
+Copyright (c) 2005-2010 Aaron Darling 
+This file based on PhyloTree.h, from the libMems library
+See http://sourceforge.net/projects/mauve for more information
+about libMems
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
