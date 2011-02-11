@@ -6,7 +6,7 @@ Welcome to PhylOTU
 ###February 2011###
 The PhylOTU manuscript has been published at PLoS Computational Biology (January 2011 edition) and the source code is now officially live. The manuscript describes many aspects of the workflow logic and decisions and demonstrates the method's use, applicability, and validity. I highly recommend reading the manuscript prior to using PhylOTU to ensure its proper implementation. The citation follows:
 
-Sharpton TJ, Riesenfeld SJ, Kembel SW, Ladau J, O'Dwyer JP, et al. 2011 PhylOTU: A High-Throughput Procedure Quantifies Microbial Community Diversity and Resolves Novel Taxa from Metagenomic Data. PLoS Comput Biol 7(1): e1001061. doi:10.1371/journal.pcbi.1001061
+> Sharpton TJ, Riesenfeld SJ, Kembel SW, Ladau J, O'Dwyer JP, et al. 2011 PhylOTU: A High-Throughput Procedure Quantifies Microbial Community Diversity and Resolves Novel Taxa from Metagenomic Data. PLoS Comput Biol 7(1): e1001061. doi:10.1371/journal.pcbi.1001061
 
 If you used PhylOTU in your study, please cite the above manuscript. If you have any questions that the manuscript and this documentation fail to address, please contact the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu). Additional help may be found via the comments embedded in the source code, principally otu_handler.pl and OTU.pm.
 
@@ -36,32 +36,32 @@ to create a distance matrix describing pairwise read relationships. This distanc
 MOTHUR, which implements average-neighbor clustering to identify OTUs. The final output (a list of OTU clusters)
 is a file in the matrix subdirectory of the metagenomic sample set with the following typed name:
 
-<path_to_database>/samples/<SAMPLE_NAME>/matrix/<SAMPLE_NAME>.an.list
+> <path_to_database>/samples/<SAMPLE_NAME>/matrix/<SAMPLE_NAME>.an.list
 
 ##REQUIREMENTS##
 
 There are lots of dependencies. Please read carefully to ensure your system is properly configured. I have included links to the software in question. Please contact me if you find these are dead. Don't forget your local open source developer for contributing to this infrastructure.
 
 PhylOTU is primarily written in Perl 5 and R. Run time dependencies include the following Perl packages:
--Bioperl-live libraries (https://github.com/bioperl/bioperl-live)
--IPC::System::Simple (http://search.cpan.org/~pjf/IPC-System-Simple-1.21/lib/IPC/System/Simple.pm)
--Bio::Phylo::IO (http://search.cpan.org/~rvosa/Bio-Phylo-0.34/lib/Bio/Phylo/IO.pm) 
--File::Basename (http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Basename.pm)
--File::Path (http://search.cpan.org/~dland/File-Path-2.08/Path.pm)
--File::Copy (http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Copy.pm)
+-  Bioperl-live libraries (https://github.com/bioperl/bioperl-live)
+-  IPC::System::Simple (http://search.cpan.org/~pjf/IPC-System-Simple-1.21/lib/IPC/System/Simple.pm)
+-  Bio::Phylo::IO (http://search.cpan.org/~rvosa/Bio-Phylo-0.34/lib/Bio/Phylo/IO.pm) 
+-  File::Basename (http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Basename.pm)
+-  File::Path (http://search.cpan.org/~dland/File-Path-2.08/Path.pm)
+-  File::Copy (http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Copy.pm)
 
 In addition, you must have the following R library installed:
--APE (easiest install is via the R command install.packages, see http://cran.r-project.org/web/packages/ape/index.html)
+-  APE (easiest install is via the R command install.packages, see http://cran.r-project.org/web/packages/ape/index.html)
 
 As well as the following C++ library:
--Boost (http://www.boost.org/)
+-  Boost (http://www.boost.org/)
 
 PhylOTU stitches together various software packages written by other authors. While the software can easily be modified to accomodate various software suites, it is currently designed to implement the following tools, which you will also need to install on your system. The use of methods alternative to those listed here should be coupled with an independent validation test as described in the PhylOTU manuscript
 
--INFERNAL (http://infernal.janelia.org/)
--FastTree (http://www.microbesonline.org/fasttree/)
--BLAST [legacy version] (ftp://ftp.ncbi.nlm.nih.gov/blast/executables/release/LATEST/)
--MOTHUR (http://www.mothur.org/wiki/Main_Page)
+-  INFERNAL (http://infernal.janelia.org/)
+-  FastTree (http://www.microbesonline.org/fasttree/)
+-  BLAST [legacy version] (ftp://ftp.ncbi.nlm.nih.gov/blast/executables/release/LATEST/)
+-  MOTHUR (http://www.mothur.org/wiki/Main_Page)
 
 Please see the authors' websites for instructions regarding the installation of any of the above software.
 
@@ -70,8 +70,8 @@ Please see the authors' websites for instructions regarding the installation of 
 
 PhylOTU uses two c++ programs to efficiently process large data sets (align2profile_qc_Col.cpp and tree_to_matrix.cpp). Compile these programs by navigating to the directory that contains the source code and running the following commands at the command line:
 
-g++ align2profile_qc_Col.cpp -o align2profile_qc_Col
-g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
+> g++ align2profile_qc_Col.cpp -o align2profile_qc_Col
+> g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
 
 ###B. Reference Data and CMmodel building###
 
@@ -79,21 +79,21 @@ PhylOTU leverages reference 16S sequence data (high-quality, full-length) to con
 
 Because of the particular licensing agreement, we cannot currently distribute the reference data we use in our study with this software (though we are working with the publishers of the reference data to change this). We recommend contacting the Ribosomal Database Project to obtain the reference library described in the RDP v 10 manuscript:
 
-Cole et. al. The Ribosomal Database Project: improved alignments and new tools for rRNA analysis. Nucleic Acids Res. 2009 Jan;37(Database issue):D141-5. Epub 2008 Nov 12.
+> Cole et. al. The Ribosomal Database Project: improved alignments and new tools for rRNA analysis. Nucleic Acids Res. 2009 Jan;37(Database issue):D141-5. Epub 2008 Nov 12.
 
 You can alternatively create your own 16S reference alignment (that includes secondary structural information), though we would recommend independengly evaluating the model you build from this alignment. 
 
 The reference alignment is used to build a CMmodel using INFERNAL's cmbuild program. This model enables sensitive alignment of fragmented reads that are phylogenetically diverse from the full-length reference sequences within the context of the reference multiple sequence alignment. The specific cmbuild run-time parameters depend on various characteristics of the reference alignment. If you use the RDP reference alignment mentioned above, the following command will build a CMmodel (the same we use in the manuscript): 
 
-cmbuild --rf --ere 1.4 <name of model> <reference alignment file>
+> cmbuild --rf --ere 1.4 <name of model> <reference alignment file>
 
 For the above command to work, your reference alignment file must be in stockholm format. Alternative alignments may require different settings, but will generally look like the above command. PhylOTU will build the model for you (using the above parameters as defaults, see section C below for more), but it only needs to occur once. Since this is a time intensive process, ensure that you not telling PhylOTU to unnecessairly rebuild a model. When you use the --first parameter (see section C, above), PhylOTU will automatically try to build the model for you, so odds are good you'll never need to worry about this. If you do this by hand, any models you construct should be placed in 
 
-<database>/reference/profiles/ 
+> <database>/reference/profiles/ 
 
 and the corresponding reference alignment should be placed in 
 
-<database>/reference/aligns
+> <database>/reference/aligns
  
 ###C. Build the flat file database###
 
@@ -103,19 +103,19 @@ Prior to initialization, you'll need to set a few variables: the database path, 
 
 To initialize the database and have PhylOTU build your CMmodel from a reference alignment of your choosing, run the following command at the command line in the directory where you have the PhylOTU code installed (this builds the bacteria model):
  
-perl otu_handler.pl -first -ra <path_to_bacteria_reference_alignment> -bac
+> perl otu_handler.pl -first -ra <path_to_bacteria_reference_alignment> -bac
 
 to build the archaeal model, use the following command:
 
-perl otu_handler.pl -first -ra <path_to_archaea_reference_alignment> -arc
+> perl otu_handler.pl -first -ra <path_to_archaea_reference_alignment> -arc
 
 If you didn't hardcode the database and code paths in otu_handler.pl, you'd amend the above statements with the appropriate command line options. For the bacteria example:
 
-perl otu_handler.pl -first -ra <path_to_reference_alignment> -db <path_to_database> -sd <path_to_code>
+> perl otu_handler.pl -first -ra <path_to_reference_alignment> -db <path_to_database> -sd <path_to_code>
 
 This command will initialize the aforementioned database and reference files, including the CMmodel. If you want to build multiple CMmodels (e.g., one for bacteria and one for archaea), simply run the first of the two above commands multiple times, pointing -ra to a different reference alignment each time. If you want to initialize the database and then build a CMmodel by hand (see section B, above), run the following command in the same directory:
 
-perl otu_handler.pl -first
+> perl otu_handler.pl -first
 
 Note that you will be unable to use PhylOTU until you build a cmmodel.
 
@@ -125,11 +125,11 @@ Generally speaking, you are now ready to process a metagenomic library with Phyl
 
 PhylOTU is run directly at the command line and is implemented via a single command:
 
-perl otu_handler.pl -bac -arc -i <metagenomic sequence file> 
+> perl otu_handler.pl -bac -arc -i <metagenomic sequence file> 
 
 That said, there are many settings that need to be controlled for successful implementation of PhylOTU. These settings are controlled through the handler script otu_handler.pl under the section USER RUNTIME OPTIONS. Please see the source code of otu_hander.pl for detailed information about the various settings and their use. The output of PhylOTU is a database of files in addition to
 run-time logs. You may elect to pipe these logs to a file to reduce screen clutter with the follwing command:
 
-perl otu_handler.pl -i <metagenomic sequence file> > standard.out 2> error.log
+> perl otu_handler.pl -i <metagenomic sequence file> > standard.out 2> error.log
 
 Please send all bug reports and inquiries to the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu).
