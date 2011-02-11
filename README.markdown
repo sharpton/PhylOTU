@@ -43,6 +43,7 @@ is a file in the matrix subdirectory of the metagenomic sample set with the foll
 There are lots of dependencies. Please read carefully to ensure your system is properly configured. I have included links to the software in question. Please contact me if you find these are dead. Don't forget your local open source developer for contributing to this infrastructure.
 
 PhylOTU is primarily written in Perl 5 and R. Run time dependencies include the following Perl packages:
+
 -  Bioperl-live libraries (https://github.com/bioperl/bioperl-live)
 -  IPC::System::Simple (http://search.cpan.org/~pjf/IPC-System-Simple-1.21/lib/IPC/System/Simple.pm)
 -  Bio::Phylo::IO (http://search.cpan.org/~rvosa/Bio-Phylo-0.34/lib/Bio/Phylo/IO.pm) 
