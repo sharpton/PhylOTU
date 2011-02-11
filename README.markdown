@@ -49,12 +49,14 @@ PhylOTU is primarily written in Perl 5 and R. Run time dependencies include the 
 -  [Bio::Phylo::IO](http://search.cpan.org/~rvosa/Bio-Phylo-0.34/lib/Bio/Phylo/IO.pm) 
 -  [File::Basename](http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Basename.pm)
 -  [File::Path](http://search.cpan.org/~dland/File-Path-2.08/Path.pm)
--  [File::Cop]y(http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Copy.pm)
+-  [File::Copy](http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Copy.pm)
 
 In addition, you must have the following R library installed:
+
 -  [APE](http://cran.r-project.org/web/packages/ape/index.html) Note: easiest install is via the R command install.packages
 
 As well as the following C++ library:
+
 -  [Boost](http://www.boost.org/)
 
 PhylOTU stitches together various software packages written by other authors. While the software can easily be modified to accomodate various software suites, it is currently designed to implement the following tools, which you will also need to install on your system. The use of methods alternative to those listed here should be coupled with an independent validation test as described in the PhylOTU manuscript
