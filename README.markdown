@@ -44,25 +44,25 @@ There are lots of dependencies. Please read carefully to ensure your system is p
 
 PhylOTU is primarily written in Perl 5 and R. Run time dependencies include the following Perl packages:
 
--  Bioperl-live libraries (https://github.com/bioperl/bioperl-live)
--  IPC::System::Simple (http://search.cpan.org/~pjf/IPC-System-Simple-1.21/lib/IPC/System/Simple.pm)
--  Bio::Phylo::IO (http://search.cpan.org/~rvosa/Bio-Phylo-0.34/lib/Bio/Phylo/IO.pm) 
--  File::Basename (http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Basename.pm)
--  File::Path (http://search.cpan.org/~dland/File-Path-2.08/Path.pm)
--  File::Copy (http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Copy.pm)
+-  [Bioperl-live libraries](https://github.com/bioperl/bioperl-live)
+-  [IPC::System::Simple](http://search.cpan.org/~pjf/IPC-System-Simple-1.21/lib/IPC/System/Simple.pm)
+-  [Bio::Phylo::IO](http://search.cpan.org/~rvosa/Bio-Phylo-0.34/lib/Bio/Phylo/IO.pm) 
+-  [File::Basename](http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Basename.pm)
+-  [File::Path](http://search.cpan.org/~dland/File-Path-2.08/Path.pm)
+-  [File::Cop]y(http://search.cpan.org/~rjbs/perl-5.12.3/lib/File/Copy.pm)
 
 In addition, you must have the following R library installed:
--  APE (easiest install is via the R command install.packages, see http://cran.r-project.org/web/packages/ape/index.html)
+-  [APE](http://cran.r-project.org/web/packages/ape/index.html) Note: easiest install is via the R command install.packages
 
 As well as the following C++ library:
--  Boost (http://www.boost.org/)
+-  [Boost](http://www.boost.org/)
 
 PhylOTU stitches together various software packages written by other authors. While the software can easily be modified to accomodate various software suites, it is currently designed to implement the following tools, which you will also need to install on your system. The use of methods alternative to those listed here should be coupled with an independent validation test as described in the PhylOTU manuscript
 
--  INFERNAL (http://infernal.janelia.org/)
--  FastTree (http://www.microbesonline.org/fasttree/)
--  BLAST [legacy version] (ftp://ftp.ncbi.nlm.nih.gov/blast/executables/release/LATEST/)
--  MOTHUR (http://www.mothur.org/wiki/Main_Page)
+-  [INFERNAL](http://infernal.janelia.org/)
+-  [FastTree](http://www.microbesonline.org/fasttree/)
+-  [BLAST legacy version](ftp://ftp.ncbi.nlm.nih.gov/blast/executables/release/LATEST/)
+-  [MOTHUR](http://www.mothur.org/wiki/Main_Page)
 
 Please see the authors' websites for instructions regarding the installation of any of the above software.
 
@@ -88,7 +88,7 @@ The reference alignment is used to build a CMmodel using INFERNAL's cmbuild prog
 
 > cmbuild --rf --ere 1.4 <name of model> <reference alignment file>
 
-For the above command to work, your reference alignment file must be in stockholm format. Alternative alignments may require different settings, but will generally look like the above command. PhylOTU will build the model for you (using the above parameters as defaults, see section C below for more), but it only needs to occur once. Since this is a time intensive process, ensure that you not telling PhylOTU to unnecessairly rebuild a model. When you use the --first parameter (see section C, above), PhylOTU will automatically try to build the model for you, so odds are good you'll never need to worry about this. If you do this by hand, any models you construct should be placed in 
+For the above command to work, your reference alignment file must be in stockholm format. Alternative alignments may require different settings, but will generally look like the above command. PhylOTU will build the model for you (using the above parameters as defaults, see section C below for more), but it only needs to occur once. Since this is a time intensive process, ensure that you not telling PhylOTU to unnecessairly rebuild a model. When you use the -first parameter (see section C, above), PhylOTU will automatically try to build the model for you, so odds are good you'll never need to worry about this. If you do this by hand, any models you construct should be placed in 
 
 > <database>/reference/profiles/ 
 
