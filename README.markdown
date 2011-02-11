@@ -6,7 +6,7 @@ Welcome to PhylOTU
 ###February 2011###
 The PhylOTU manuscript has been published at PLoS Computational Biology (January 2011 edition) and the source code is now officially live. The manuscript describes many aspects of the workflow logic and decisions and demonstrates the method's use, applicability, and validity. I highly recommend reading the manuscript prior to using PhylOTU to ensure its proper implementation. The citation follows:
 
-> Sharpton TJ, Riesenfeld SJ, Kembel SW, Ladau J, O'Dwyer JP, et al. 2011 PhylOTU: A High-Throughput Procedure Quantifies Microbial Community Diversity and Resolves Novel Taxa from Metagenomic Data. PLoS Comput Biol 7(1): e1001061. doi:10.1371/journal.pcbi.1001061
+> [Sharpton TJ, Riesenfeld SJ, Kembel SW, Ladau J, O'Dwyer JP, et al. 2011 PhylOTU: A High-Throughput Procedure Quantifies Microbial Community Diversity and Resolves Novel Taxa from Metagenomic Data. PLoS Comput Biol 7(1): e1001061. doi:10.1371/journal.pcbi.1001061](http://www.ploscompbiol.org/article/info:doi/10.1371/journal.pcbi.1001061)
 
 If you used PhylOTU in your study, please cite the above manuscript. If you have any questions that the manuscript and this documentation fail to address, please contact the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu). Additional help may be found via the comments embedded in the source code, principally otu_handler.pl and OTU.pm.
 
