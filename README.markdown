@@ -1,9 +1,9 @@
 Welcome to PhylOTU
 ==================
 
-==ANNOUNCEMENTS==
+##ANNOUNCEMENTS##
 
-February 2011
+###February 2011###
 The PhylOTU manuscript has been published at PLoS Computational Biology (January 2011 edition) and the source code is now officially live. The manuscript describes many aspects of the workflow logic and decisions and demonstrates the method's use, applicability, and validity. I highly recommend reading the manuscript prior to using PhylOTU to ensure its proper implementation. The citation follows:
 
 Sharpton TJ, Riesenfeld SJ, Kembel SW, Ladau J, O'Dwyer JP, et al. 2011 PhylOTU: A High-Throughput Procedure Quantifies Microbial Community Diversity and Resolves Novel Taxa from Metagenomic Data. PLoS Comput Biol 7(1): e1001061. doi:10.1371/journal.pcbi.1001061
@@ -12,7 +12,7 @@ If you used PhylOTU in your study, please cite the above manuscript. If you have
 
 TJS
 
-August 2010
+###August 2010###
 This software is still in beta and is subject to change. More specific documentation is being worked up. 
 In the meantime, please see the source code for more information (otu_handler.pl and OTU.pm) and 
 contact the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu) with specific inquiries.
@@ -21,7 +21,7 @@ Keep an eye out for the PhylOTU manuscript, which is currently in review.
 
 TJS
 
-==INTRODUCTION==
+##INTRODUCTION##
 
 PhylOTU is a software workflow that identifies OTUs directly from metagenomic reads. Because of the 
 particular methodology employed in PhylOTU, reads that share no sequence overlap (i.e., cannot be 
@@ -38,7 +38,7 @@ is a file in the matrix subdirectory of the metagenomic sample set with the foll
 
 <path_to_database>/samples/<SAMPLE_NAME>/matrix/<SAMPLE_NAME>.an.list
 
-==REQUIREMENTS==
+##REQUIREMENTS##
 
 There are lots of dependencies. Please read carefully to ensure your system is properly configured. I have included links to the software in question. Please contact me if you find these are dead. Don't forget your local open source developer for contributing to this infrastructure.
 
@@ -65,15 +65,15 @@ PhylOTU stitches together various software packages written by other authors. Wh
 
 Please see the authors' websites for instructions regarding the installation of any of the above software.
 
-==INSTALLATION AND SETUP==
-A. C++ compilation
+##INSTALLATION AND SETUP##
+###A. C++ compilation###
 
 PhylOTU uses two c++ programs to efficiently process large data sets (align2profile_qc_Col.cpp and tree_to_matrix.cpp). Compile these programs by navigating to the directory that contains the source code and running the following commands at the command line:
 
 g++ align2profile_qc_Col.cpp -o align2profile_qc_Col
 g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
 
-B. Reference Data and CMmodel building
+###B. Reference Data and CMmodel building###
 
 PhylOTU leverages reference 16S sequence data (high-quality, full-length) to construct an evolutionary model via the cmbuild function in INFERNAL. 
 
@@ -95,7 +95,7 @@ and the corresponding reference alignment should be placed in
 
 <database>/reference/aligns
  
-C. Build the flat file database
+###C. Build the flat file database###
 
 PhylOTU organizes the sample, reference, and workflow output data via the use of a flat file database. While you may specify the root location of the database, the subdirectory structure is controlled by PhylOTU. Once you have designated a location for your database, you need to initialize it. This involves creating the organizational hierarchy, building the STAP blast databases, and training the 16S CMmodel from the reference alignment (see section B, above). Some of these steps take a few moments (dependent on reference sequence database size), but only need to be conducted once. With the infrastructure established, PhylOTU can run relatively quickly on very large metagenomic datasets. 
 
@@ -121,7 +121,7 @@ Note that you will be unable to use PhylOTU until you build a cmmodel.
 
 Generally speaking, you are now ready to process a metagenomic library with PhylOTU.
 
-==IMPLEMENTATION==
+##IMPLEMENTATION##
 
 PhylOTU is run directly at the command line and is implemented via a single command:
 
