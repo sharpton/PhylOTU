@@ -928,7 +928,7 @@ sub tree_to_matrix_cpp{
   my $dom = "";
   ( $self, $mstart, $mend, $format, $cutoff, $do_pruning, $dom )  = @_;
   my @domains;
-  if( !( -e ( $self->{"workdir"} . "tree_to_matrix_cpp" ) ) ){
+  if( !( -e ( $self->{"workdir"} . "tree_to_matrix" ) ) ){
     print "You haven't compiled tree_to_matrix_cpp. Please run the following command to compile (requires the Boost library):\n g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix\nand then restart PhylOTU using the -k Mg++ align2profile_qc_Col.cpp -o align2profile_qc_Col option to restart this step\n";
     die;
   }
