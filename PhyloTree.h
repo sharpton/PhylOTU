@@ -12,27 +12,6 @@
 #include <sstream>
 #include <stack>
 
-/*PhyloTree.h - Tree parsing and navigation routines
-Copyright (c) 2005-2010 Aaron Darling 
-This file based on PhyloTree.h, from the libMems library
-See http://sourceforge.net/projects/mauve for more information
-about libMems
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-    
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-    
-You should have received a copy of the GNU General Public License
-along with this program (see LICENSE.txt).  If not, see 
-<http://www.gnu.org/licenses/>.
-*/
-
 //typedef unsigned int node_id_t;
 typedef size_t node_id_t;
 class TreeNode 
@@ -324,6 +303,8 @@ void PhyloTree<T>::readTree( std::istream& tree_file )
 }
 
 ///////////////////////////////////////////////////////////////////////
+/// WARNING!!!! This function doesn't deal with non-binary trees!!! ///
+/// HOWEVER, this function is never called by tree_to_matrix/PhylOTU //
 template< class T >
 void PhyloTree<T>::writeAllNodes( std::ostream& os ) const{
   for( typename std::list<T>::const_iterator it=nodes.begin(); it!=nodes.end(); it++ ){
@@ -460,7 +441,7 @@ void PhyloTree<T>::renumber(){
 }
 
 ///////////////////////////////////////////////////////////////////////
-
+/// WARNING!!! Deleting nodes made convert an unrooted tree into a rooted tree ///
 template< class T >
 int PhyloTree<T>::deleteLeaf( const char* node_name ){
 
@@ -558,9 +539,10 @@ int PhyloTree<T>::smooth(){
 ///////////////////////////////////////////////////////////////////////
 template< class T >
 int PhyloTree<T>::check_root(){
-  // the tree shoudl already be smoothed before this...
+  // the tree should already be smoothed before this...
 
-  if( root->children.size() == 2 ){ std::cout << "TEST\n"; return 0; } // The root is already fine, just return
+  if( root->children.size() == 2 ){ std::cout << "This is a rooted binary tree\n"; return 0; } // The root is already fine, just return
+  if( root->children.size() == 3 ){ std::cout << "This is an unrooted tree\n"; return 0; } // The root is already fine, just return
   if( root->children.size() != 1 ){ 
     std::cout << "ERROR: Strange root with " << root->children.size() << "children\n"; 
     return 1;
@@ -580,6 +562,8 @@ int PhyloTree<T>::check_root(){
 
 ///////////////////////////////////////////////////////////////////////
 /** determine which nodes are descendants of a given node */
+/// WARNING!!!! This function doesn't deal with non-binary trees!!! ///
+/// HOWEVER, this function is never called by tree_to_matrix/PhylOTU //
 template< class TreeType >
 void getDescendants( TreeType& alignment_tree, node_id_t node, std::vector< node_id_t >& descendants )
 {
@@ -603,6 +587,8 @@ void getDescendants( TreeType& alignment_tree, node_id_t node, std::vector< node
 
 ///////////////////////////////////////////////////////////////////////
 /** determine which nodes are leaf nodes below a given node */
+/// WARNING!!!! This function doesn't deal with non-binary trees!!! ///
+/// HOWEVER, this function is never called by tree_to_matrix/PhylOTU //
 template< class TreeType >
 void getLeaves( TreeType& tree, node_id_t node, std::vector< node_id_t >& leaves )
 {
