@@ -1,3 +1,5 @@
+/// WARNING: This code, in the tree pruning step,  ///
+/// may change an unrooted tree into a rooted tree ///
 #include <boost/config.hpp>
 #include <iostream>
 #include <cstdlib>
@@ -10,25 +12,6 @@
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 
   using namespace boost;
-
-/*tree_to_matrix.cpp - convert a phylogeny to a distance matrix (FAST)
-Copyright (C) 2011  Thomas J. Sharpton 
-author contact: thomas.sharpton@gladstone.ucsf.edu
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-    
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-    
-You should have received a copy of the GNU General Public License
-along with this program (see LICENSE.txt).  If not, see 
-<http://www.gnu.org/licenses/>.
-*/
 
 int main(int argc, char *argv[])
 {
@@ -97,7 +80,8 @@ int main(int argc, char *argv[])
   infile.open(inname);
   if( !infile.is_open() ){ std::cout << "Unable to open file " << inname << std::endl; }
   tr->readTree(infile);
-
+  std::cout << "LEAVES: " << tr->getNleaves() << std::endl;
+  tr->check_root();
   /////////////////////////////////////////
   // Prune tree (if necessary)
   if( do_pruning>0 ){
