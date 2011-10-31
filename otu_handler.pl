@@ -168,8 +168,12 @@ $project->set_sample( $samp_path );
 $project->set_domains( \@domains );
 $project->set_tree_method( $tree_method );
 $project->build_db( $masterdir, $first_build );
-$project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
-$project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
+if( $bac ){
+  $project->set_blastdb( "BAC", "stap_16S_BAC.fa" );
+}
+if( $arc ){
+  $project->set_blastdb( "ARC", "stap_16S_ARC.fa" );
+}
 $project->format_blast_db();
 if( $first_build || $build_model ){
   foreach my $set( @domains ){

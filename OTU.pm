@@ -440,14 +440,34 @@ sub grab_SSU_reads{
 		  #print join( "\t", "." , ".", $result->query_name, $hit->name, $hsp->start('query'), $hsp->end('query'), $qstart, $qstop, "\n");	  
 		}
 		my $avg_score = $score / $nhsps;
-		$self->{"bhits"}->{$result->query_name} = { 
-							   'set'     => $set,
-							   'qstart'  => $qstart,
-							   'qstop'   => $qstop,
-							   'score'   => $avg_score,
-							   'qstrand' => $qstrand,
-							   'hstrand' => $hstrand,
-							  };
+		if( defined( $self->{"bhits"}->{$result->query_name} ) ){
+		  print Dumper ($self->{"bhits"}->{$result->query_name} );
+		  print "set is $set\n";
+		  print " comparing results for " . $result->query_name . "\n";
+		  my $old_score = $self->{"bhits"}->{$result->query_name}->{"score"};
+		  print "  score: $score\n";
+		  print "  old:   $old_score\n";
+		  if ($avg_score > $old_score ){
+		    $self->{"bhits"}->{$result->query_name} = { 
+							       'set'     => $set,
+							       'qstart'  => $qstart,
+							       'qstop'   => $qstop,
+							       'score'   => $avg_score,
+							       'qstrand' => $qstrand,
+							       'hstrand' => $hstrand,
+							      };
+		  }
+		}
+		else{
+		  $self->{"bhits"}->{$result->query_name} = { 
+							     'set'     => $set,
+							     'qstart'  => $qstart,
+							     'qstop'   => $qstop,
+							     'score'   => $avg_score,
+							     'qstrand' => $qstrand,
+							     'hstrand' => $hstrand,
+							    };	       
+		}
 		next RESULT;
 	      }
 	      else{
@@ -1025,7 +1045,7 @@ sub run_mothur{
     #Having problems getting bin.seqs to work inside mothur, so we'll dot it ourselves later
     my $command  = "#set.dir(output=$outdir); read.dist(phylip=$inmat, cutoff=$cutoff); cluster(method=$method, cutoff=$cutoff);";
     print "executing mother using $command\n";
-    print "Note: Please check your version of MOTHUR. We have found a possible bug in MOTHUR v.1.16.1 that may affect the number of OTUs reported at your desired cutoff. We are working with the Schloss lab to resolve this. We advise substantially increasing your desired cutoff or rolling back to a prior version of MOTHUR to avoid the bug in the interim.\n";
+    print "NOTE: Because of the way hierarchical clustering works in MOTHUR, we advise substantially increasing your desired cutoff for this analysis and selecting the results that correspond to your desired cutoff from the output data. See the MOTHUR manual for more details or contact the author of this sofware. This is not a warning or error message.\n";
     my $results  = capture( "mothur \"$command\"" );
     if( $EXITVAL != 0 ){
       warn("Error running mothur for $inmat!\n");

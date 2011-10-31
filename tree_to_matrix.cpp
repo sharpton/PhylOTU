@@ -1,5 +1,6 @@
 #include <boost/config.hpp>
 #include <iostream>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include "PhyloTree.h"
