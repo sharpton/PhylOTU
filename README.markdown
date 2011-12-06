@@ -36,7 +36,7 @@ to create a distance matrix describing pairwise read relationships. This distanc
 MOTHUR, which implements average-neighbor clustering to identify OTUs. The final output (a list of OTU clusters)
 is a file in the matrix subdirectory of the metagenomic sample set with the following typed name:
 
-> <<path_to_database>>/samples/<SAMPLE_NAME>/matrix/<<SAMPLE_NAME>>.an.list
+> *path_to_database*/samples/<SAMPLE_NAME>/matrix/*SAMPLE_NAME*.an.list
 
 ##REQUIREMENTS##
 
