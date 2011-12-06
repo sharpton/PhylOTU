@@ -36,7 +36,7 @@ to create a distance matrix describing pairwise read relationships. This distanc
 MOTHUR, which implements average-neighbor clustering to identify OTUs. The final output (a list of OTU clusters)
 is a file in the matrix subdirectory of the metagenomic sample set with the following typed name:
 
-> *path_to_database*/samples/<SAMPLE_NAME>/matrix/*SAMPLE_NAME*.an.list
+> *path_to_database*/samples/*SAMPLE_NAME*/matrix/*SAMPLE_NAME*.an.list
 
 ##REQUIREMENTS##
 
@@ -89,33 +89,33 @@ You can alternatively create your own 16S reference alignment (that includes sec
 
 The reference alignment is used to build a CMmodel using INFERNAL's cmbuild program. This model enables sensitive alignment of fragmented reads that are phylogenetically diverse from the full-length reference sequences within the context of the reference multiple sequence alignment. The specific cmbuild run-time parameters depend on various characteristics of the reference alignment. If you use the RDP reference alignment mentioned above, the following command will build a CMmodel (the same we use in the manuscript): 
 
-> cmbuild --rf --ere 1.4 <name of model> <reference alignment file>
+> cmbuild --rf --ere 1.4 *name of model* *reference alignment file*
 
 For the above command to work, your reference alignment file must be in stockholm format. Alternative alignments may require different settings, but will generally look like the above command. PhylOTU will build the model for you (using the above parameters as defaults, see section C below for more), but it only needs to occur once. Since this is a time intensive process, ensure that you not telling PhylOTU to unnecessairly rebuild a model. When you use the *-first* parameter (see section C, above), PhylOTU will automatically try to build the model for you, so odds are good you'll never need to worry about this. If you do this by hand, any models you construct should be placed in 
 
-> <database>/reference/profiles/ 
+> *database*/reference/profiles/ 
 
 and the corresponding reference alignment should be placed in 
 
-> <database>/reference/aligns
+> *database*/reference/aligns
  
 ###C. Build the flat file database###
 
 PhylOTU organizes the sample, reference, and workflow output data via the use of a flat file database. While you may specify the root location of the database, the subdirectory structure is controlled by PhylOTU. Once you have designated a location for your database, you need to initialize it. This involves creating the organizational hierarchy, building the STAP blast databases, and training the 16S CMmodel from the reference alignment (see section B, above). Some of these steps take a few moments (dependent on reference sequence database size), but only need to be conducted once. With the infrastructure established, PhylOTU can run relatively quickly on very large metagenomic datasets. 
 
-Prior to initialization, you'll need to set a few variables: the database path, the PhylOTU code path, and the path to your reference alignment (optional). To set the database path, open otu_handler.pl and point the variable $masterdir to the location you want to install your database. Alternatively, run PhylOTU at the command line using the *-db <path_to_database>* parameter. You will also need to hardcode the location of the PhylOTU source code on your computer in otu_hander.pl. Specifically, point the variable $scripts_path to your code. Alternatively, use the *-sd <path_to_code>* parameter at run time. It is recommended that you hardcode these location within otu_handler.pl since this is unlikely to change once installed. To point to the reference alignment, use the *-ra <path_to_reference_alignment>* parameter at run-time.
+Prior to initialization, you'll need to set a few variables: the database path, the PhylOTU code path, and the path to your reference alignment (optional). To set the database path, open otu_handler.pl and point the variable $masterdir to the location you want to install your database. Alternatively, run PhylOTU at the command line using the *-db *path_to_database** parameter. You will also need to hardcode the location of the PhylOTU source code on your computer in otu_hander.pl. Specifically, point the variable $scripts_path to your code. Alternatively, use the *-sd *path_to_code** parameter at run time. It is recommended that you hardcode these location within otu_handler.pl since this is unlikely to change once installed. To point to the reference alignment, use the *-ra *path_to_reference_alignment** parameter at run-time.
 
 To initialize the database and have PhylOTU build your CMmodel from a reference alignment of your choosing, run the following command at the command line in the directory where you have the PhylOTU code installed (this builds the bacteria model):
  
-> perl otu_handler.pl -first -ra <path_to_bacteria_reference_alignment> -bac
+> perl otu_handler.pl -first -ra *path_to_bacteria_reference_alignment* -bac
 
 to build the archaeal model, use the following command:
 
-> perl otu_handler.pl -first -ra <path_to_archaea_reference_alignment> -arc
+> perl otu_handler.pl -first -ra *path_to_archaea_reference_alignment* -arc
 
 If you didn't hardcode the database and code paths in otu_handler.pl, you'd amend the above statements with the appropriate command line options. For the bacteria example:
 
-> perl otu_handler.pl -first -ra <path_to_reference_alignment> -db <path_to_database> -sd <path_to_code>
+> perl otu_handler.pl -first -ra *path_to_reference_alignment* -db *path_to_database* -sd *path_to_code*
 
 This command will initialize the aforementioned database and reference files, including the CMmodel. If you want to build multiple CMmodels (e.g., one for bacteria and one for archaea), simply run the first of the two above commands multiple times, pointing *-ra* to a different reference alignment each time. If you want to initialize the database and then build a CMmodel by hand (see section B, above), run the following command in the same directory:
 
@@ -129,11 +129,11 @@ Generally speaking, you are now ready to process a metagenomic library with Phyl
 
 PhylOTU is run directly at the command line and is implemented via a single command:
 
-> perl otu_handler.pl -bac -arc -i <metagenomic sequence file> 
+> perl otu_handler.pl -bac -arc -i *metagenomic sequence file* 
 
 That said, there are many settings that need to be controlled for successful implementation of PhylOTU. These settings are controlled through the handler script otu_handler.pl under the section USER RUNTIME OPTIONS. Please see the source code of otu_hander.pl for detailed information about the various settings and their use. The output of PhylOTU is a database of files in addition to
 run-time logs. You may elect to pipe these logs to a file to reduce screen clutter with the follwing command:
 
-> perl otu_handler.pl -i <metagenomic sequence file> > standard.out 2> error.log
+> perl otu_handler.pl -i *metagenomic sequence file* > standard.out 2> error.log
 
 Please send all bug reports and inquiries to the author (Thomas Sharpton - thomas.sharpton@gladstone.ucsf.edu).
