@@ -73,9 +73,9 @@ Please see the authors' websites for instructions regarding the installation of 
 
 PhylOTU uses two c++ programs to efficiently process large data sets (align2profile_qc_Col.cpp and tree_to_matrix.cpp). Compile these programs by navigating to the directory that contains the source code and running the following commands at the command line:
 
-> g++ align2profile_qc_Col.cpp -o align2profile_qc_Col
+> g++ align2profile_qc_Col.cpp -O2 -o align2profile_qc_Col
 
-> g++ -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
+> g++ -O2 -I /usr/include/boost/ tree_to_matrix.cpp -o tree_to_matrix
 
 ###B. Reference Data and CMmodel building###
 
