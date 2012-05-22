@@ -1,6 +1,0 @@
-What I need to do for the next version:
-
-1. Make the data available in the github repo, at least the STAP databases. Why isn't this there already?
-2. Clarify the walkthrough for a first time installation. You confused yourself when you reinstalled on chef. Specifically, make is so that people can point to the stap DB path on the command line and have it dump the db into the correct place within the db when running -first.
-3. See notes from Aaron about header fixes for g++.
-
