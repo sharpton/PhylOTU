@@ -1,0 +1,27 @@
+1. Need to stitch blast hsps into a single hit for 16S locus trimming. (grab_SSU_reads)
+
+2. parallelize align qc step.
+
+3. get short reads working. Might be best to try expanding the volume in the reference database
+
+4. Long branch attraction issues regarding root. How much of a concern is this?
+
+5. Alignment qc appears to be conservative. Rebecca will send me an alignment
+
+6. If only 1 read passes the qc, program dies. Can't execute tree prune on one read.
+
+7. if SSU reads have same identifier, FastTree breaks. Build a check on this. 
+
+8. FastTree can't handle colons. Maybe a warning @ start of code, ask users to ensure unique identifiers are formatted properly
+
+9. V6 blast issue: STAP not enough seqs to find homology in variable regions
+
+10. May want to collapse identical V6 tags, blast a representative
+
+11. Fix cmscore printing. Email from Rebecca. Test the fix.
+
+12. in run_otu_handler.sh:
+
+ > logs/${JOB_ID}.all 2> &1
+
+13. Fix HSP extraction process duing grab SSU sequences. Need to link HSP's together to get 16S boundary from read.

@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
-#include <cstring>
 #include "PhyloTree.h"
 
 #include <boost/graph/graph_traits.hpp>
