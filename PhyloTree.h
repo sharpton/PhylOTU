@@ -33,7 +33,7 @@ along with this program (see LICENSE.txt).  If not, see
 <http://www.gnu.org/licenses/>.
 */
 
-				    //typedef unsigned int node_id_t;
+//typedef unsigned int node_id_t;
 typedef size_t node_id_t;
 class TreeNode 
 {
@@ -258,66 +258,198 @@ void PhyloTree<T>::readTree( std::istream& tree_file )
 	  new_it = nodes.end(); new_it--;
 	  node_stack.top()->children.push_back( new_it );
 	  node_stack.push( new_it );
-	  read_state = 2;// pop this node afstart, charI - section_start ) );
-	  blen_str >> node_stack.top()->distance;
-	}else{
-	  // read off a name, if possible
-	  if( read_state == 1 ){
-	    new_node.parents.clear();
-	    new_node.parents.push_back( node_stack.top() );
-	    nodes.push_back( new_node );
-	    new_it = nodes.end(); new_it--;
-	    node_stack.top()->children.push_ba;
-	    read_state = 2;// pop this node after reading its branch length
-	  }
-	  if( tree_line[section_start-1] == ')' ){
-	    // This is a FastTree score (do nothing for now)
-	  } else {
-	    // This is a node name
-	    node_stack.top()->name = tree_line.su( it->parents.size() > 0 ){
-	      os << it->parents[0]->number  << "\t";
-	    } else {
-	      os << "\t";
-	    }
-	    // children
-	    os << it->children.size()    << "\t";
-	    if( it->children.size() > 0 ){
-	      os << it->children[0]->number << "\t";
-	    } else {
-	      os <<< "]";
-	    }
-	    os << "(";
+	  read_state = 2;// pop this node after reading its branch length
+	}
+	node_stack.top()->name = tree_line.substr( section_start, charI - section_start );
+      }
+      if( read_state == 2 ){
+	node_stack.pop();
+      }
+      section_start = charI + 1;
+      blen_found = false;
+      
+      // pop off the top of the node stack
+      read_state = 2;
+      break;
+    case ',':
+      if( blen_found ){
+	// read off a branch length
+	blen_str.clear();
+	blen_str.str( tree_line.substr( section_start, charI - section_start ) );
+	blen_str >> node_stack.top()->distance;
+      }else{
+	// read off a name, if possible
+	if( read_state == 1 ){
+	  new_node.parents.clear();
+	  new_node.parents.push_back( node_stack.top() );
+	  nodes.push_back( new_node );
+	  new_it = nodes.end(); new_it--;
+	  node_stack.top()->children.push_back( new_it );
+	  node_stack.push( new_it );
+	  read_state = 2;// pop this node after reading its name
+	}
+	node_stack.top()->name = tree_line.substr( section_start, charI - section_start );
+      }
+      if( read_state == 2 )
+	node_stack.pop();
+      section_start = charI + 1;
+      read_state = 1;// indicates that we'll be creating a new node when we hit :
+      blen_found = false;
+      break;
+    case ':':
+      // read off a name, if possible
+      if( read_state == 1 ){
+	new_node.parents.clear();
+	new_node.parents.push_back( node_stack.top() );
+	nodes.push_back( new_node );
+	new_it = nodes.end(); new_it--;
+	node_stack.top()->children.push_back( new_it );
+	node_stack.push( new_it );
+	read_state = 2;// pop this node after reading its branch length
+      }
+      if( tree_line[section_start-1] == ')' ){
+	// This is a FastTree score (do nothing for now)
+      } else {
+	// This is a node name
+	node_stack.top()->name = tree_line.substr( section_start, charI - section_start );
+      }
+      section_start = charI + 1;
+      blen_found = true;
+      break;
+    default:
+      break;
+    }
+  }
+  std::cout << "Done reading in tree, WARNING: you may want to run renumber() to number the tree\n";
+}
 
-	    while( node_stack.size() > 0 ) {
-	      if(  node_stack.top()->children.size() != 0 ){
-		// this is a parent node
-		// if we have scanned all its children then pop it
-		if( child_stack.top() == node_stack.top()->children.size() ){
-		  os << ")";
-		  if( node_stack.size() > 1 && write_branch_lengths ){
-		    os << ":" << node_stack.top()->distance;
-		  }
-		  node_stack.pop();
-		  child_< node_stack.top()->distance;
-		}
-		// pop the child
-		node_stack.pop();
-	      }
-	      os << ";" << std::endl;
-	    }
+///////////////////////////////////////////////////////////////////////
+/// WARNING!!!! This function doesn't deal with non-binary trees!!! ///
+/// HOWEVER, this function is never called by tree_to_matrix/PhylOTU //
+template< class T >
+void PhyloTree<T>::writeAllNodes( std::ostream& os ) const{
+  for( typename std::list<T>::const_iterator it=nodes.begin(); it!=nodes.end(); it++ ){
+    os << it->number             << "\t" << it->distance << "\t";
+    // parents
+    os << it->parents.size() << "\t";
+    if( it->parents.size() > 0 ){
+      os << it->parents[0]->number  << "\t";
+    } else {
+      os << "\t";
+    }
+    // children
+    os << it->children.size()    << "\t";
+    if( it->children.size() > 0 ){
+      os << it->children[0]->number << "\t";
+    } else {
+      os << "\t";
+    }
+    if( it->children.size() > 1 ){
+      os << it->children[1]->number << "\t";
+    } else {
+      os << "\t";
+    }
+    os << it->name               << "\t" << std::endl;
+  }
 
-	    ///////////////////////////////////////////////////////////////////////
-	    /*
+}
+///////////////////////////////////////////////////////////////////////
+
+template< class T >
+void PhyloTree<T>::writeTree( std::ostream& os ) const{
+  std::stack<typename std::list<T>::iterator> node_stack;
+  std::stack< size_t > child_stack;
+  node_stack.push( root );
+  child_stack.push( 0 );
+  bool write_branch_lengths = false;
+  for( typename std::list<T>::const_iterator it=nodes.begin(); it!=nodes.end(); it++ ){
+    if( it->distance != 0 ){
+      write_branch_lengths = true;
+      break;
+    }
+  }
+  if( (*this).weight != 0 ){
+    os << "[" << weight << "]";
+  }
+  os << "(";
+
+  while( node_stack.size() > 0 ) {
+    if(  node_stack.top()->children.size() != 0 ){
+      // this is a parent node
+      // if we have scanned all its children then pop it
+      if( child_stack.top() == node_stack.top()->children.size() ){
+	os << ")";
+	if( node_stack.size() > 1 && write_branch_lengths ){
+	  os << ":" << node_stack.top()->distance;
+	}
+	node_stack.pop();
+	child_stack.pop();
+	continue;
+      }
+
+      // try to recurse to its children
+      // if the child is a parent as well spit out a parent
+      typename std::list<T>::iterator child = node_stack.top()->children[ child_stack.top() ];
+      node_stack.push( child );
+      child_stack.top()++;
+      // print a comma to separate multiple children
+      if( child_stack.top() > 1 ){
+	os << ",";
+      }
+
+      if( child->children.size() > 0 ){
+	child_stack.push( 0 );
+	os << "(";
+      }
+      continue;
+    }
+    
+    // this is a leaf node
+    os << node_stack.top()->name;
+    if( write_branch_lengths ){
+      os << ":" << node_stack.top()->distance;
+    }
+    // pop the child
+    node_stack.pop();
+  }
+  os << ";" << std::endl;
+}
+
+///////////////////////////////////////////////////////////////////////
+/*
 template< class T >
 double PhyloTree<T>::getHeight() const
 {
   return getHeight( root );
 }
-	    */
-	       ///////////////////////////////////////////////////////////////////////
-	       /*
+*/
+///////////////////////////////////////////////////////////////////////
+/*
 template< class T >
-double Phylo/////////////////////
+double PhyloTree<T>::getHeight( node_id_t nodeI ) const
+{
+  // Not properly implemented with new version of tree
+  if( (*this)[ nodeI ].children.size() == 0 )
+    return (*this)[ nodeI ].distance;
+  return (*this)[ nodeI ].distance + getHeight( (*this)[ nodeI ].children[ 0 ] );
+}
+*/
+///////////////////////////////////////////////////////////////////////
+
+template< class T >
+int PhyloTree<T>::getNleaves()
+{
+  int nleaves=0;
+  for( typename std::list<T>::iterator it=nodes.begin(); it!=nodes.end(); it++ ){
+    if( it->children.size() == 0 ){
+      nleaves++;
+    }
+  }
+  
+  return nleaves;
+}
+
+///////////////////////////////////////////////////////////////////////
 
 template< class T >
 void PhyloTree<T>::renumber(){
@@ -331,15 +463,59 @@ void PhyloTree<T>::renumber(){
 
 ///////////////////////////////////////////////////////////////////////
 /// WARNING!!! Deleting nodes made convert an unrooted tree into a rooted tree ///
-template< c+){
+template< class T >
+int PhyloTree<T>::deleteLeaf( const char* node_name ){
+
+  int count = 0;
+  int named = strlen(node_name);
+  if( named ){
+    //    std::cout << "\nDeleting node with name " << node_name << std::endl;
+  } else {
+    //    std::cout << "Deleting all unnamed nodes\n";
+  }
+
+  // Loop over leaves until I find this one
+  typename std::list<T>::iterator Cit;
+  typename std::list<T>::iterator Cit_todelete;
+  typename std::vector< typename std::list<T>::iterator >::iterator Pit;
+  typename std::vector< typename std::list<T>::iterator >::iterator PCit;
+  for (Cit=nodes.begin(); Cit !=nodes.end(); Cit++){
     if( Cit->children.size() == 0 && Cit->name.compare(node_name)==0 ){
       // Remove all references to this node from the parents
       for (  Pit = Cit->parents.begin();  Pit != Cit->parents.end();   Pit++){
-      for (PCit = (*Pit)->children.begin(); PCit != (*Pit)->children.end(); PCit++){
-        if( (*PCit) == Cit ){
+	for (PCit = (*Pit)->children.begin(); PCit != (*Pit)->children.end(); PCit++){
+	  if( (*PCit) == Cit ){
 	    // Delete the reference to this child
-	        (*Pit)->children.erase(PCit);
-		    brt<T>::iterator >::iterator Parent;
+	    (*Pit)->children.erase(PCit);
+	    break;
+	  }
+	}
+      }
+      // Delete the node
+      Cit_todelete = Cit;
+      Cit--;
+      nodes.erase(Cit_todelete);
+      count++;
+      // If this is a named node we're done
+      if( named ){
+	return count;
+      }
+    }
+  }
+    
+  std::cout << "Removed " << count << " unnamed nodes, WARNING: You may want to renumber() the tree\n";
+  return count;
+}
+
+///////////////////////////////////////////////////////////////////////
+
+template< class T >
+int PhyloTree<T>::smooth(){
+  int count = 0;
+
+  typename std::list<T>::iterator it;
+  typename std::list<T>::iterator it_todelete;
+  typename std::vector< typename std::list<T>::iterator >::iterator Parent;
   typename std::vector< typename std::list<T>::iterator >::iterator Child;
   typename std::vector< typename std::list<T>::iterator >::iterator Pit;
   typename std::vector< typename std::list<T>::iterator >::iterator Cit;
@@ -350,16 +526,47 @@ template< c+){
       Child  = it->children.begin();
       Parent = it->parents.begin();
 
-      /e reference that needs to be changed
-      *Pit = *Parent;
-        break;
-	}
+      // Set the grandparent's child as it's grandchild
+      for (Cit = (*Parent)->children.begin(); Cit != (*Parent)->children.end(); Cit++){
+if( (*Cit) == it ){
+  // This is the reference that needs to be changed
+  *Cit = *Child;
+  break;
+}
+      }
+      // Set the child's grandparent as it's parent
+      for (Pit = (*Child)->parents.begin(); Pit != (*Child)->parents.end(); Pit++){
+if( (*Pit) == it ){
+  // This is the reference that needs to be changed
+  *Pit = *Parent;
+  break;
+}
       }
       // Make the child's distance also into the node we're removing
       (*Child)->distance += it->distance;
       
       // Delete the node
-      it_todele
+      it_todelete = it;
+      it--;
+      nodes.erase(it_todelete);
+      count++;
+    }
+  }
+  
+  std::cout << "Removed " << count << " 1-child nodes, WARNING: You may want to renumber() the tree\n";
+  return count;
+}
+
+///////////////////////////////////////////////////////////////////////
+template< class T >
+int PhyloTree<T>::check_root(){
+  // the tree should already be smoothed before this...
+
+  if( root->children.size() == 2 ){ std::cout << "This is a rooted binary tree\n"; return 0; } // The root is already fine, just return
+  if( root->children.size() == 3 ){ std::cout << "This is an unrooted tree\n"; return 0; } // The root is already fine, just return
+  if( root->children.size() != 1 ){ 
+    std::cout << "ERROR: Strange root with " << root->children.size() << "children\n"; 
+    return 1;
   }
   typename std::list<T>::iterator newroot;
   // Set the new root to be the child of the old root
@@ -375,11 +582,25 @@ template< c+){
 }
 
 ///////////////////////////////////////////////////////////////////////
-/** determine which nodesen.size() > 0 )
+/** determine which nodes are descendants of a given node */
+/// WARNING!!!! This function doesn't deal with non-binary trees!!! ///
+/// HOWEVER, this function is never called by tree_to_matrix/PhylOTU //
+template< class TreeType >
+void getDescendants( TreeType& alignment_tree, node_id_t node, std::vector< node_id_t >& descendants )
 {
-  node_stack.push(alignment_tree[cur_node].children[0]);
-    node_stack.push(alignment_tree[cur_node].children[1]);
-    }
+  // do a depth first search
+  std::stack< node_id_t > node_stack;
+  node_stack.push( node );
+  descendants.clear();
+  while( node_stack.size() > 0 )
+    {
+      node_id_t cur_node = node_stack.top();
+      node_stack.pop();
+      if( alignment_tree[cur_node].children.size() > 0 )
+	{
+	  node_stack.push(alignment_tree[cur_node].children[0]);
+	  node_stack.push(alignment_tree[cur_node].children[1]);
+	}
       descendants.push_back(cur_node);
     }
 }
@@ -387,9 +608,31 @@ template< c+){
 
 ///////////////////////////////////////////////////////////////////////
 /** determine which nodes are leaf nodes below a given node */
-///////////////////////////////////////
+/// WARNING!!!! This function doesn't deal with non-binary trees!!! ///
+/// HOWEVER, this function is never called by tree_to_matrix/PhylOTU //
+template< class TreeType >
+void getLeaves( TreeType& tree, node_id_t node, std::vector< node_id_t >& leaves )
+{
+  // do a depth first search
+  std::stack< node_id_t > node_stack;
+  node_stack.push( node );
+  leaves.clear();
+  while( node_stack.size() > 0 )
+    {
+      node_id_t cur_node = node_stack.top();
+      node_stack.pop();
+      if( tree[cur_node].children.size() > 0 )
+	{
+	  node_stack.push(tree[cur_node].children[0]);
+	  node_stack.push(tree[cur_node].children[1]);
+	}else
+	leaves.push_back(cur_node);
+    }
+}
 
-	    namespace std {
+///////////////////////////////////////////////////////////////////////
+
+namespace std {
   
   template< class T > inline
     void swap( PhyloTree<T>& a, PhyloTree<T>& b )
@@ -398,6 +641,6 @@ template< c+){
     }
   
   template<> inline void swap( PhyloTree<TreeNode>& a, PhyloTree<TreeNode>& b){ a.swap(b); }
-	    }
+}
 
 #endif // __PhyloTree_h__
